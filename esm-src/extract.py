@@ -113,6 +113,7 @@ def main(args):
                     result["bos_representations"] = {
                         layer: t[i, 0] for layer, t in representations.items()
                     }
+                result["logits"] = logits[i, 1: len(strs[i]) + 1]
                 torch.save(
                     result,
                     args.output_file,
