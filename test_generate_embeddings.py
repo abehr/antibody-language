@@ -38,7 +38,7 @@ with torch.no_grad():
 
 
 # Note that token 0 for each seq is BOS so it should be ignored. First residue is token 1.
-token_embeddings = results["representations"][34]
+token_embeddings = np.delete(results["representations"][34], (0), axis=1) # go from (2, 459, 1280) -> (2, 458, 1280)
 
 '''
 # OPTIONALLY, Generate per-sequence embeddings via averaging
