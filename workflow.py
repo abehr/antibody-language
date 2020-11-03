@@ -9,7 +9,6 @@ import random
 
 
 model_name = 'esm1_t34_670M_UR50S'
-
 model_url = 'https://dl.fbaipublicfiles.com/fair-esm/models/%s.pt' % model_name
 model_dir = 'models'
 model_fp = os.path.join(model_dir, model_name + '.pt')
@@ -28,10 +27,8 @@ initial_masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103
 
 all_fastas = ['subset_seq89k', 'random_generated', 'substitution_generated', 'model_generated']
 
-
 def main():
 	use_cpu = True
-	model, alphabet = load_local_model(use_cpu)
 	with open(cov1_ab_fp) as f: cov1_ab = f.readline().strip()
 
 	# 89k seqs, for training downstream model
@@ -44,7 +41,9 @@ def main():
 	random_generated_embeddings = load_seqs_and_embeddings('random_generated', use_cpu)
 
 	# Model-generated mutations
-	model_generated_embeddings = model_predict_seq(model, alphabet, cov1_ab, initial_masks, use_cpu)
+	model_generated_embeddings = model_predict_seq(cov1_ab, initial_masks, use_cpu)
+
+
 
 
 def compute_embeddings(name):
@@ -101,7 +100,8 @@ def random_gen(seq, masks):
 
 
 # Simple unmasking method - just predict all masked tokens at once using softmax
-def model_predict_seq(model, alphabet, seq, masks, use_cpu):
+def model_predict_seq(seq, masks, use_cpu):
+	model, alphabet = load_local_model(use_cpu)
 	batch_converter = alphabet.get_batch_converter()
 		
 	# Note this will also pad any sequence with different length
