@@ -13,9 +13,9 @@ The main procedure is executed in `workflow#main`:
 - Load the ESM deep Transformer language model.
 - Compute embeddings for the 89k candidate sequences with binding energy calculations, for use in training the downstream evaluation model.
 - Generate a set of randomly-mutated candidate sequences to compare with the language model & compute embeddings for those candidates.
-- (todo) Generate a set of candidate sequences mutated using a substitution matrix, to compare with the language model and compute their embeddings.
-- Generate (todo: a set of) candidate sequences mutated using the language model. We plan to evaluate several ways of performing this "unmasking" task, which we discuss in the report.
+- (ToDo) Generate a set of candidate sequences mutated using a substitution matrix, to compare with the language model and compute their embeddings.
+- Generate (ToDo: a set of) candidate sequences mutated using the language model. We plan to evaluate several ways of performing this "unmasking" task, which we discuss in the report. We expect that other strategies will be more effective than our current "naive" strategy.
 
-The embeddings generated (1) randomly, (2) using a substitution matrix, and (3) by the language model will be compared using the regression model. 
+(ToDo) The embeddings generated (1) randomly, (2) using a substitution matrix, and (3) by the language model will be compared using the regression model. 
 
 Finally, we will attempt to augment and/or fine-tune the model to improve the performance on this task.
