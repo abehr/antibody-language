@@ -34,21 +34,24 @@ def compute_embeddings(fastas):
 			'--repr_layers', '34', '--include', 'mean', 'per_tok'])
 
 
-# Could return raw seq from fasta plus embedding info but this may not be necessary
+# Could also return raw seq from fasta plus FoldX info, but this may not be necessary
 def load_seqs_and_embeddings(name, use_cpu):
 	assert os.path.exists(fasta_fp(name)), 'Fasta file for %s does not exist' % name
 	assert os.path.exists(embedding_dir(name)), 'Embeddings for %s do not exist' % name
 	
-	if use_cpu or not torch.cuda.is_available():
-		data = torch.load(model_path, map_location=torch.device('cpu'))
-	else:
-		data = torch.load(model_path)
+	embeddings_dict = {}
+	for f in os.listdir(embedding_dir(name)):
+		if use_cpu or not torch.cuda.is_available():
+			data = torch.load(os.path.join(embedding_dir(name), f), map_location=torch.device('cpu'))
+		else:
+			data = torch.load(f)
 
-	labels = data['label'] # Can also extract FoldX etc. 
-	embeddings = np.delete(data['representations'][34], (0), axis=1)
-	# logits = np.delete(data['logits'], (0), axis=1)
+		label = data['label']
+		token_embeddings = np.delete(data['representations'][34], (0), axis=1)
+		# logits = np.delete(data['logits'], (0), axis=1)
+		embeddings_dict[label] = token_embeddings
 
-	return labels, embeddings
+	return embeddings_dict
 
 
 
@@ -110,10 +113,10 @@ def tokens2strs(alphabet, batch_tokens):
 	return [''.join((alphabet.get_tok(t) for t in tokens)) for tokens in batch_tokens]
 
 
-def load_local_model(model_path, use_cpu):
+def load_local_model(use_cpu):
 	# (tweaked from pretrained load model)
 	alphabet = esm.Alphabet.from_dict(esm.constants.proteinseq_toks)
-	model_data = torch.load(model_path, map_location=torch.device('cpu'))
+	model_data = torch.load(model_fp, map_location=torch.device('cpu'))
 
 	pra = lambda s: ''.join(s.split('decoder_')[1:] if 'decoder' in s else s)
 	prs = lambda s: ''.join(s.split('decoder.')[1:] if 'decoder' in s else s)
