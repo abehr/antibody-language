@@ -5,33 +5,60 @@ import numpy as np
 import subprocess
 import esm_src.esm as esm
 from argparse import Namespace
+import random
+
 
 model_name = 'esm1_t34_670M_UR50S'
 
 model_url = 'https://dl.fbaipublicfiles.com/fair-esm/models/%s.pt' % model_name
 model_dir = 'models'
+model_fp = os.path.join(model_dir, model_name + '.pt')
 data_dir = 'data'
-cov1_ab_fp = 'cov1-antibody.txt'
+cov1_ab_fp = os.path.join(data_dir, 'cov1-antibody.txt')
 
-model_fp = '%s/%s.pt' % (model_dir, model_name)
-embedding_dir = lambda name: '%s/%s_embeddings' % (data_dir, name)
-fasta_fp = lambda name: '%s/%s.fasta' % (data_dir, name)
+vocab = esm.constants.proteinseq_toks['toks']
+
+embedding_dir = lambda name: os.path.join(data_dir, name + '_embeddings')
+fasta_fp = lambda name: os.path.join(data_dir, name + '.fasta')
+
 
 # 1-indexed list of indices to allowed to mutate
 initial_masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103,104,271,273,274,275,335,336,337,338,340,341]
 
+
 all_fastas = ['subset_seq89k', 'random_generated', 'substitution_generated', 'model_generated']
 
 
-def compute_embeddings(fastas):
+def main():
+	use_cpu = True
+	model, alphabet = load_local_model(use_cpu)
+	with open(cov1_ab_fp) as f: cov1_ab = f.readline().strip()
+
+	# 89k seqs, for training downstream model
+	compute_embeddings('subset_seq89k')
+	subset_seq89k_embeddings = load_seqs_and_embeddings('subset_seq89k', use_cpu)
+
+	# Randomly generated mutations
+	generate_random_predictions(cov1_ab, initial_masks, 9)
+	compute_embeddings('random_generated')
+	random_generated_embeddings = load_seqs_and_embeddings('random_generated', use_cpu)
+
+	# Model-generated mutations
+	model_generated_embeddings = model_predict_seq(model, alphabet, cov1_ab, initial_masks, use_cpu)
+
+
+def compute_embeddings(name):
+	assert os.path.exists(fasta_fp(name)), 'Fasta file for %s does not exist' % name
+	assert not os.path.exists(embedding_dir(name)), 'Embeddings for %s already exist' % name
+
 	# Download model manually, otherwise torch method from extract will put it in a cache
 	if not os.path.exists(model_fp):
+		print('Model does not exist locally - downloading %s' % model_name)
 		if not os.path.exists(model_dir): os.mkdir(model_dir)
 		subprocess.run(['curl', '-o', model_fp, model_url])
 
-	for name in fastas:
-		subprocess.run(['python3', 'esm_src/extract.py', model_fp, fasta_fp(name), embedding_dir(name), 
-			'--repr_layers', '34', '--include', 'mean', 'per_tok'])
+	subprocess.run(['python3', 'esm_src/extract.py', model_fp, fasta_fp(name), embedding_dir(name), 
+		'--repr_layers', '34', '--include', 'mean', 'per_tok'])
 
 
 # Could also return raw seq from fasta plus FoldX info, but this may not be necessary
@@ -54,23 +81,32 @@ def load_seqs_and_embeddings(name, use_cpu):
 	return embeddings_dict
 
 
-
-def generators_predict_seqs():
-	pass
-	
-
-# Simple unmasking method - just predict all masked tokens at once using softmax
-def model_predict_seq(use_cpu):
+def load_template():
 	with open(cov1_ab_fp) as f:
 		cov1_ab = f.readline().strip()
 
-	model, alphabet = load_local_model(model_fp, use_cpu=use_cpu)
+
+def generate_random_predictions(seq, masks, num_seqs):
+	name = 'random_generated'
+	assert not os.path.exists(fasta_fp(name)), '%s fasta already exists' % name
+	
+	with open(fasta_fp(name), 'w') as f:
+		for n in range(num_seqs):
+			f.write('>%s_%d\n' % (name, n+1))
+			f.write('%s\n' % random_gen(seq, masks))
+
+
+def random_gen(seq, masks):
+	return ''.join([(random.choice(vocab) if i+1 in masks else tok) for i,tok in enumerate(seq)])
+
+
+# Simple unmasking method - just predict all masked tokens at once using softmax
+def model_predict_seq(model, alphabet, seq, masks, use_cpu):
 	batch_converter = alphabet.get_batch_converter()
 		
 	# Note this will also pad any sequence with different length
-	labels, strs, tokens = batch_converter([('cov1_ab', cov1_ab)])
-	
-	apply_mask(tokens, initial_masks)
+	labels, strs, tokens = batch_converter([('cov1_ab', seq)])
+	apply_mask(tokens, masks)
 
 	with torch.no_grad():
 		results = model(tokens, repr_layers=[34])
@@ -83,14 +119,15 @@ def model_predict_seq(use_cpu):
 
 	# Compute embedding for the new predicted sequence
 	cov2_predicted_str = tokens2strs(alphabet, tokens)[0]
-	labels, strs, tokens = batch_converter([('cov2_predicted', cov2_predicted_str)])
+	labels, strs, tokens = batch_converter([('cov2_model_predicted', cov2_predicted_str)])
 
 	with torch.no_grad():
 		results = model(tokens, repr_layers=[34])
 
 	_, token_embeddings, _ = parse_model_results(tokens, results)
 
-	return token_embeddings
+	# return in the same format as load_seqs_and_embeddings
+	return {labels[i]: token_embeddings[i] for i in range(len(labels))}
 
 
 def parse_model_results(batch_tokens, results):
@@ -145,12 +182,5 @@ def softmax_predict_unmask(batch_tokens, logits):
 
 
 
-#if __name__ == '__main__':
-	# use_cpu = True
-	#generators_predict_seqs()
-	#compute_embeddings(all_fastas)
-	
-	#compute_embeddings(['subset_seq89k'])
-	#load_seqs_and_embeddings('subset_seq89k', True)
-
-	# model_predict_seqs(use_cpu)
+if __name__ == '__main__':
+	main()
