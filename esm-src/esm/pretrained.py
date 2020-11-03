@@ -8,9 +8,9 @@ import torch
 from argparse import Namespace
 from .constants import proteinseq_toks
 
-def load_model_and_alphabet(model_name):
+def load_model_and_alphabet(model_name, nogpu=False):
     if model_name.endswith(".pt"):  # treat as filepath
-        return load_model_and_alphabet_local(model_name)
+        return load_model_and_alphabet_local(model_name, nogpu)
     else:
         return load_model_and_alphabet_hub(model_name)
 
@@ -36,10 +36,15 @@ def load_model_and_alphabet_hub(model_name):
 
     return model, alphabet
 
-def load_model_and_alphabet_local(model_location):
+def load_model_and_alphabet_local(model_location, nogpu=False):
+    use_cpu = nogpu or not torch.cuda.is_available()
+
     alphabet = esm.Alphabet.from_dict(proteinseq_toks)
 
-    model_data = torch.load(model_location)
+    if use_cpu:
+        model_data = torch.load(model_location, map_location=torch.device('cpu'))
+    else:
+        model_data = torch.load(model_location)
 
     # upgrade state dict
     pra = lambda s: ''.join(s.split('decoder_')[1:] if 'decoder' in s else s)

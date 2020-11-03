@@ -57,7 +57,7 @@ def create_parser():
 
 
 def main(args):
-    model, alphabet = pretrained.load_model_and_alphabet(args.model_location)
+    model, alphabet = pretrained.load_model_and_alphabet(args.model_location, args.nogpu)
     model.eval()
     if torch.cuda.is_available() and not args.nogpu:
         model = model.cuda()
