@@ -30,7 +30,7 @@ initial_masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103
 
 all_fastas = ['subset_seq89k', 'random_generated', 'substitution_generated', 'model_generated']
 
-def workflow():
+def run():
 	use_cpu = True
 	with open(cov1_ab_fp) as f: cov1_ab = f.readline().strip()
 
@@ -214,4 +214,4 @@ def softmax_predict_unmask(batch_tokens, logits):
 
 if __name__ == '__main__':
 	pass
-	# workflow()
+	# run()
