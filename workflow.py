@@ -16,7 +16,7 @@ model_dir = 'models'
 model_fp = os.path.join(model_dir, model_name + '.pt')
 data_dir = 'data'
 cov1_ab_fp = os.path.join(data_dir, 'cov1-antibody.txt')
-foldx_metadata_fp = os.path.join(data_dir, '85kseqs_nodupes.xlsx')
+foldx_metadata_fp = os.path.join(data_dir, '89ksequences.xlsx')
 
 vocab = esm.constants.proteinseq_toks['toks']
 
@@ -138,7 +138,7 @@ def random_gen(seq, masks):
 def model_predict_seq(seq, masks, use_cpu):
 	name = 'cov2_model_predicted'
 	print('Generate %s predictions' % name)
-	
+
 	model, alphabet = load_local_model(use_cpu)
 	batch_converter = alphabet.get_batch_converter()
 		
