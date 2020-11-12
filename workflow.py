@@ -30,8 +30,7 @@ initial_masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103
 
 all_fastas = ['seq85k', 'subset_seq89k', 'random_generated', 'substitution_generated', 'model_generated']
 
-def run():
-	use_cpu = True
+def run(use_cpu=True):
 
 	print('Load initial SARS-CoV-1 antibody sequence')
 	with open(cov1_ab_fp) as f: cov1_ab = f.readline().strip()
@@ -89,7 +88,7 @@ def load_seqs_and_embeddings(name, use_cpu, import_energy_metadata=False):
 		if use_cpu or not torch.cuda.is_available():
 			data = torch.load(os.path.join(embedding_dir(name), f), map_location=torch.device('cpu'))
 		else:
-			data = torch.load(f)
+			data = torch.load(os.path.join(embedding_dir(name), f))
 
 		label = data['label']
 		token_embeddings = np.delete(data['representations'][34], (0), axis=1)
