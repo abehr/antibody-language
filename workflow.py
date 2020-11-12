@@ -2,6 +2,8 @@ import torch
 import sys
 import os
 import numpy as np
+import pandas as pd
+import xlrd # for excel with pandas
 import subprocess
 import esm_src.esm as esm
 from argparse import Namespace
@@ -14,6 +16,7 @@ model_dir = 'models'
 model_fp = os.path.join(model_dir, model_name + '.pt')
 data_dir = 'data'
 cov1_ab_fp = os.path.join(data_dir, 'cov1-antibody.txt')
+foldx_metadata_fp = os.path.join(data_dir, '89ksequences.xlsx')
 
 vocab = esm.constants.proteinseq_toks['toks']
 
@@ -27,13 +30,13 @@ initial_masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103
 
 all_fastas = ['subset_seq89k', 'random_generated', 'substitution_generated', 'model_generated']
 
-def main():
+def workflow():
 	use_cpu = True
 	with open(cov1_ab_fp) as f: cov1_ab = f.readline().strip()
 
 	# 89k seqs, for training downstream model
 	compute_embeddings('subset_seq89k')
-	subset_seq89k_embeddings = load_seqs_and_embeddings('subset_seq89k', use_cpu)
+	subset_seq89k_embeddings = load_seqs_and_embeddings('subset_seq89k', use_cpu, True)
 
 	# Randomly generated mutations
 	generate_random_predictions(cov1_ab, initial_masks, 9)
@@ -43,7 +46,11 @@ def main():
 	# Model-generated mutations
 	model_generated_embeddings = model_predict_seq(cov1_ab, initial_masks, use_cpu)
 
-
+	return {
+		'subset_seq89k': subset_seq89k_embeddings,
+		'random_generated': random_generated_embeddings,
+		'model_generated': model_generated_embeddings
+	}
 
 
 def compute_embeddings(name):
@@ -56,15 +63,23 @@ def compute_embeddings(name):
 		if not os.path.exists(model_dir): os.mkdir(model_dir)
 		subprocess.run(['curl', '-o', model_fp, model_url])
 
+	# This script will automatically use GPU if possible, but will not have any errors if not. 
 	subprocess.run(['python3', 'esm_src/extract.py', model_fp, fasta_fp(name), embedding_dir(name), 
 		'--repr_layers', '34', '--include', 'mean', 'per_tok'])
 
 
 # Could also return raw seq from fasta plus FoldX info, but this may not be necessary
-def load_seqs_and_embeddings(name, use_cpu):
+def load_seqs_and_embeddings(name, use_cpu, import_energy_metadata=False):
 	assert os.path.exists(fasta_fp(name)), 'Fasta file for %s does not exist' % name
 	assert os.path.exists(embedding_dir(name)), 'Embeddings for %s do not exist' % name
-	
+
+	if import_energy_metadata:
+		# Get FoldX calculations from Excel spreadsheet
+		assert os.path.exists(foldx_metadata_fp), 'FoldX data file %s does not exist' % foldx_metadata_fp
+		print('Read FoldX data from Excel file')
+		df = pd.read_excel(foldx_metadata_fp, sheet_name=1) # Sheet2
+
+	print('Load embeddings from files and combine with metadata')
 	embeddings_dict = {}
 	for f in os.listdir(embedding_dir(name)):
 		if use_cpu or not torch.cuda.is_available():
@@ -75,7 +90,22 @@ def load_seqs_and_embeddings(name, use_cpu):
 		label = data['label']
 		token_embeddings = np.delete(data['representations'][34], (0), axis=1)
 		# logits = np.delete(data['logits'], (0), axis=1)
-		embeddings_dict[label] = token_embeddings
+		d = {'token_embeddings': token_embeddings}
+
+		if import_energy_metadata:
+			metadata = df.loc[df.Antibody_ID==label]
+
+			assert metadata.shape[0] > 0, 'Expected a metadata entry for %s' % label
+			# TODO: There are some duplicate entries, which should be investigaged. 
+			# It does not matter for this case, however.
+			# assert metadata.shape[0] < 2, 'Expected only one metadata entry for %s' % label
+			metadata = metadata.iloc[0] # ignore duplicate entries
+
+			d['FoldX_Average_Whole_Model_DDG'] = metadata.FoldX_Average_Whole_Model_DDG
+			d['FoldX_Average_Interface_Only_DDG'] = metadata.FoldX_Average_Interface_Only_DDG
+			d['Statium'] = metadata.Statium
+
+		embeddings_dict[label] = d
 
 	return embeddings_dict
 
@@ -127,7 +157,7 @@ def model_predict_seq(seq, masks, use_cpu):
 	_, token_embeddings, _ = parse_model_results(tokens, results)
 
 	# return in the same format as load_seqs_and_embeddings
-	return {labels[i]: token_embeddings[i] for i in range(len(labels))}
+	return {labels[i]: {'token_embeddings': token_embeddings[i]} for i in range(len(labels))}
 
 
 def parse_model_results(batch_tokens, results):
@@ -183,4 +213,5 @@ def softmax_predict_unmask(batch_tokens, logits):
 
 
 if __name__ == '__main__':
-	main()
+	pass
+	# workflow()
