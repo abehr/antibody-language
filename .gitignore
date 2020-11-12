@@ -1,0 +1,5 @@
+__pycache__
+data/random_generated.fasta
+data/random_generated_embeddings
+data/subset_seq89k_embeddings
+models
