@@ -32,6 +32,8 @@ all_fastas = ['seq85k', 'subset_seq89k', 'random_generated', 'substitution_gener
 
 def run():
 	use_cpu = True
+
+	print('Load initial SARS-CoV-1 antibody sequence')
 	with open(cov1_ab_fp) as f: cov1_ab = f.readline().strip()
 
 	# 89k seqs, for training downstream model
@@ -54,6 +56,7 @@ def run():
 
 
 def compute_embeddings(name):
+	print('Compute embeddings for %s' % name)
 	assert os.path.exists(fasta_fp(name)), 'Fasta file for %s does not exist' % name
 	assert not os.path.exists(embedding_dir(name)), 'Embeddings for %s already exist' % name
 
@@ -70,6 +73,7 @@ def compute_embeddings(name):
 
 # Could also return raw seq from fasta plus FoldX info, but this may not be necessary
 def load_seqs_and_embeddings(name, use_cpu, import_energy_metadata=False):
+	print('Load seqs and embeddings for %s' % name)
 	assert os.path.exists(fasta_fp(name)), 'Fasta file for %s does not exist' % name
 	assert os.path.exists(embedding_dir(name)), 'Embeddings for %s do not exist' % name
 
@@ -117,6 +121,7 @@ def load_template():
 
 def generate_random_predictions(seq, masks, num_seqs):
 	name = 'random_generated'
+	print('Generate %s predictions' % name)
 	assert not os.path.exists(fasta_fp(name)), '%s fasta already exists' % name
 	
 	with open(fasta_fp(name), 'w') as f:
@@ -131,6 +136,9 @@ def random_gen(seq, masks):
 
 # Simple unmasking method - just predict all masked tokens at once using softmax
 def model_predict_seq(seq, masks, use_cpu):
+	name = 'cov2_model_predicted'
+	print('Generate %s predictions' % name)
+	
 	model, alphabet = load_local_model(use_cpu)
 	batch_converter = alphabet.get_batch_converter()
 		
@@ -149,7 +157,7 @@ def model_predict_seq(seq, masks, use_cpu):
 
 	# Compute embedding for the new predicted sequence
 	cov2_predicted_str = tokens2strs(alphabet, tokens)[0]
-	labels, strs, tokens = batch_converter([('cov2_model_predicted', cov2_predicted_str)])
+	labels, strs, tokens = batch_converter([(name, cov2_predicted_str)])
 
 	with torch.no_grad():
 		results = model(tokens, repr_layers=[34])
