@@ -3,10 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import esm
 import torch
 from argparse import Namespace
 from .constants import proteinseq_toks
+from .data import Alphabet
+from .model import ProteinBertModel
 
 def load_model_and_alphabet(model_name, nogpu=False):
     if model_name.endswith(".pt"):  # treat as filepath
@@ -15,7 +16,7 @@ def load_model_and_alphabet(model_name, nogpu=False):
         return load_model_and_alphabet_hub(model_name)
 
 def load_model_and_alphabet_hub(model_name):
-    alphabet = esm.Alphabet.from_dict(proteinseq_toks)
+    alphabet = Alphabet.from_dict(proteinseq_toks)
 
     url = f"https://dl.fbaipublicfiles.com/fair-esm/models/{model_name}.pt"
     if torch.cuda.is_available():
@@ -29,7 +30,7 @@ def load_model_and_alphabet_hub(model_name):
     model_args = {pra(arg[0]): arg[1] for arg in vars(model_data["args"]).items()}
     model_state = {prs(arg[0]): arg[1] for arg in model_data["model"].items()}
 
-    model = esm.ProteinBertModel(
+    model = ProteinBertModel(
         Namespace(**model_args), len(alphabet), padding_idx=alphabet.padding_idx
     )
     model.load_state_dict(model_state)
@@ -39,7 +40,7 @@ def load_model_and_alphabet_hub(model_name):
 def load_model_and_alphabet_local(model_location, nogpu=False):
     use_cpu = nogpu or not torch.cuda.is_available()
 
-    alphabet = esm.Alphabet.from_dict(proteinseq_toks)
+    alphabet = Alphabet.from_dict(proteinseq_toks)
 
     if use_cpu:
         model_data = torch.load(model_location, map_location=torch.device('cpu'))
@@ -52,7 +53,7 @@ def load_model_and_alphabet_local(model_location, nogpu=False):
     model_args = {pra(arg[0]): arg[1] for arg in vars(model_data["args"]).items()}
     model_state = {prs(arg[0]): arg[1] for arg in model_data["model"].items()}
 
-    model = esm.ProteinBertModel(
+    model = ProteinBertModel(
         Namespace(**model_args), len(alphabet), padding_idx=alphabet.padding_idx
     )
     model.load_state_dict(model_state)
