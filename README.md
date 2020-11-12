@@ -19,3 +19,11 @@ The main procedure is executed in `workflow#main`:
 (ToDo) The embeddings generated (1) randomly, (2) using a substitution matrix, and (3) by the language model will be compared using the regression model. 
 
 Finally, we will attempt to augment and/or fine-tune the model to improve the performance on this task.
+
+
+### Dependencies
+
+```bash
+# python>=3.6,<=3.8, miniconda may be easiest
+pip3 install numpy torch torchvision torchaudio pandas xlrd
+```
