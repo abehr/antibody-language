@@ -16,7 +16,7 @@ model_dir = 'models'
 model_fp = os.path.join(model_dir, model_name + '.pt')
 data_dir = 'data'
 cov1_ab_fp = os.path.join(data_dir, 'cov1-antibody.txt')
-foldx_metadata_fp = os.path.join(data_dir, '89ksequences.xlsx')
+foldx_metadata_fp = os.path.join(data_dir, '85kseqs_nodupes.xlsx')
 
 vocab = esm.constants.proteinseq_toks['toks']
 
@@ -28,7 +28,7 @@ fasta_fp = lambda name: os.path.join(data_dir, name + '.fasta')
 initial_masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103,104,271,273,274,275,335,336,337,338,340,341]
 
 
-all_fastas = ['subset_seq89k', 'random_generated', 'substitution_generated', 'model_generated']
+all_fastas = ['seq85k', 'subset_seq89k', 'random_generated', 'substitution_generated', 'model_generated']
 
 def run():
 	use_cpu = True
