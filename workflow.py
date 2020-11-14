@@ -35,9 +35,13 @@ def run(use_cpu=True):
 	print('Load initial SARS-CoV-1 antibody sequence')
 	with open(cov1_ab_fp) as f: cov1_ab = f.readline().strip()
 
-	# 89k seqs, for training downstream model
+	# Load FoldX energy calculations for the 89k sequences
+	df = import_energy_metadata()
+
+	# Subset of the 89k seqs, for (test) training downstream model
 	compute_embeddings('subset_seq89k')
-	subset_seq89k_embeddings = load_seqs_and_embeddings('subset_seq89k', use_cpu, True)
+	subset_seq89k_embeddings = load_seqs_and_embeddings('subset_seq89k', use_cpu, df)
+
 
 	# Randomly generated mutations
 	generate_random_predictions(cov1_ab, initial_masks, 9)
@@ -70,33 +74,49 @@ def compute_embeddings(name):
 		'--repr_layers', '34', '--include', 'mean', 'per_tok'])
 
 
-# Could also return raw seq from fasta plus FoldX info, but this may not be necessary
-def load_seqs_and_embeddings(name, use_cpu, import_energy_metadata=False):
+def import_energy_metadata():
+	# Get FoldX calculations from Excel spreadsheet
+	assert os.path.exists(foldx_metadata_fp), 'FoldX data file %s does not exist' % foldx_metadata_fp
+	print('Read FoldX data from Excel file')
+	return pd.read_excel(foldx_metadata_fp, sheet_name=1) # Sheet2
+
+def get_embedding_list(name):
+	assert os.path.exists(fasta_fp(name)), 'Fasta file for %s does not exist' % name
+	assert os.path.exists(embedding_dir(name)), 'Embeddings for %s do not exist' % name
+	return [os.path.splitext(x)[0] for x in os.listdir(embedding_dir(name))]
+
+'''
+energy_metadata expects a pandas dataframe (output of import_energy_metadata()).
+	If provided, it adds FoldX calculations to the output.
+subset is an optional list of sequence IDs. Normally, this function returns all
+	of the embeddings found in the 'name' embedding dir. If provided, only return
+	this subset. 
+'''
+def load_seqs_and_embeddings(name, use_cpu, energy_metadata=None, subset=None):
 	print('Load seqs and embeddings for %s' % name)
 	assert os.path.exists(fasta_fp(name)), 'Fasta file for %s does not exist' % name
 	assert os.path.exists(embedding_dir(name)), 'Embeddings for %s do not exist' % name
+	if energy_metadata is not None:
+		assert type(energy_metadata) == pd.core.frame.DataFrame, 'Unexpected energy metadata type'
 
-	if import_energy_metadata:
-		# Get FoldX calculations from Excel spreadsheet
-		assert os.path.exists(foldx_metadata_fp), 'FoldX data file %s does not exist' % foldx_metadata_fp
-		print('Read FoldX data from Excel file')
-		df = pd.read_excel(foldx_metadata_fp, sheet_name=1) # Sheet2
 
 	print('Load embeddings from files and combine with metadata')
 	embeddings_dict = {}
-	for f in os.listdir(embedding_dir(name)):
+	for seq in (subset if subset else os.listdir(embedding_dir(name))):
+		f = os.path.join(embedding_dir(name), seq + ('.pt' if subset else ''))
+		assert os.path.isfile(f), 'Requested embedding file(s) not found'
 		if use_cpu or not torch.cuda.is_available():
-			data = torch.load(os.path.join(embedding_dir(name), f), map_location=torch.device('cpu'))
+			data = torch.load(f, map_location=torch.device('cpu'))
 		else:
-			data = torch.load(os.path.join(embedding_dir(name), f))
+			data = torch.load(f)
 
 		label = data['label']
 		token_embeddings = np.delete(data['representations'][34], (0), axis=1)
 		# logits = np.delete(data['logits'], (0), axis=1)
 		d = {'token_embeddings': token_embeddings}
 
-		if import_energy_metadata:
-			metadata = df.loc[df.Antibody_ID==label]
+		if energy_metadata is not None:
+			metadata = energy_metadata.loc[energy_metadata.Antibody_ID==label]
 
 			assert metadata.shape[0] > 0, 'Expected a metadata entry for %s' % label
 			# TODO: There are some duplicate entries, which should be investigaged. 
