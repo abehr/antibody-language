@@ -14,11 +14,27 @@ import keras
 from keras.models import Sequential
 from keras.layers import Dense
 
-#Number of residues in sequence
-n = 200 
+data = workflow.run(False)
 
-X_train = np.random.rand(100, 1280*n)
-Y_train = np.random.rand(100, 3)
+embeddings = []
+scores = []
+
+for key in subset.keys():
+  embedding = torch.unsqueeze(subset[key]['token_embeddings'], 0)
+  embeddings.append(embedding)
+  score = np.zeros(3)
+  score[0] = subset[key]['FoldX_Average_Whole_Model_DDG']
+  score[1] = subset[key]['FoldX_Average_Interface_Only_DDG']
+  score[2] = subset[key]['Statium']
+  scores.append(score)
+X = torch.cat(embeddings, dim=0)
+X = torch.flatten(X, start_dim=1, end_dim=-1)
+X = X.numpy()
+
+Y = np.stack(scores)
+
+X_train = X
+Y_train = Y
 
 input_shape = X_train.shape[1]
 
@@ -27,13 +43,20 @@ dropout = .2
 def RegressionModel(input_shape, dropout=.2):
     X_input = keras.Input(input_shape)
     X = keras.layers.Dropout(dropout)(X_input)
-    X = Dense(300, activation='relu')(X_input)
+    X = Dense(300, activation='relu', kernel_initializer="he_uniform")(X)
+
+    #Trying out normalization to see if it helps with exploding loss
+    X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
     X = keras.layers.Dropout(dropout)(X)
-    X = Dense(200, activation='relu')(X_input)
-    X = keras.layers.Dropout(dropout)(X)
-    X = Dense(100, activation='relu')(X_input)
-    X = keras.layers.Dropout(dropout)(X)
-    X = Dense(3, activation='sigmoid')(X_input)
+
+    #Am not including more layers until I figure out exploding loss problem
+
+    # X = Dense(200, activation='relu')(X)
+    # X = keras.layers.Dropout(dropout)(X)
+    # X = Dense(100, activation='relu')(X)
+    # X = keras.layers.Dropout(dropout)(X)
+    
+    X = Dense(3, kernel_initializer="he_uniform")(X)
 
     model = keras.Model(inputs = X_input, outputs = X, name='RegressionModel')
 
@@ -43,5 +66,4 @@ model = RegressionModel(input_shape)
 
 model.compile(optimizer='adam', loss=keras.losses.MeanSquaredError())
 
-model.fit(x=X_train, y=Y_train, batch_size=20, epochs=10)
-
+model.fit(x=X_train, y=Y_train, batch_size=8, epochs=1)
