@@ -33,6 +33,8 @@ X = X.numpy()
 
 Y = np.stack(scores)
 
+X = keras.utils.normalize(X, axis=-1, order=2)
+
 X_train = X
 Y_train = Y
 
@@ -43,19 +45,23 @@ dropout = .2
 def RegressionModel(input_shape, dropout=.2):
     X_input = keras.Input(input_shape)
     X = keras.layers.Dropout(dropout)(X_input)
-    X = Dense(300, activation='relu', kernel_initializer="he_uniform")(X)
 
-    #Trying out normalization to see if it helps with exploding loss
+
+    X = Dense(800, activation='relu', kernel_initializer="he_uniform")(X)
     X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
     X = keras.layers.Dropout(dropout)(X)
 
-    #Am not including more layers until I figure out exploding loss problem
 
-    # X = Dense(200, activation='relu')(X)
-    # X = keras.layers.Dropout(dropout)(X)
-    # X = Dense(100, activation='relu')(X)
-    # X = keras.layers.Dropout(dropout)(X)
-    
+    X = Dense(700, activation='relu', kernel_initializer="he_uniform")(X)
+    X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
+    X = keras.layers.Dropout(dropout)(X)
+
+
+    X = Dense(400, activation='relu', kernel_initializer="he_uniform")(X)
+    X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
+    X = keras.layers.Dropout(dropout)(X)
+
+
     X = Dense(3, kernel_initializer="he_uniform")(X)
 
     model = keras.Model(inputs = X_input, outputs = X, name='RegressionModel')
@@ -66,4 +72,4 @@ model = RegressionModel(input_shape)
 
 model.compile(optimizer='adam', loss=keras.losses.MeanSquaredError())
 
-model.fit(x=X_train, y=Y_train, batch_size=8, epochs=1)
+model.fit(x=X_train, y=Y_train, batch_size=2, epochs=1)
