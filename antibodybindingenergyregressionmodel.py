@@ -71,8 +71,8 @@ model = RegressionModel(input_shape, dropout)
 model.compile(optimizer='adam', loss=keras.losses.MeanSquaredError())
 
 name = 'subset_200_seq85k'
-batch_size = 50
-step_size = 4
+batch_size = 16
+step_size = 12
 
 keys = workflow.get_embedding_list(name)
 
