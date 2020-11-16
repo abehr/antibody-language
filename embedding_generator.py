@@ -6,7 +6,7 @@ class EmbeddingGenerator(keras.utils.Sequence):
     def __init__(self, name, labels, energy_data, batch_size, include_targets=True, use_cpu=False):
         self.name = name
         self.labels = labels
-        self.df = energy_data
+        self.foldx_dict = energy_data
         self.batch_size = batch_size
         self.include_targets = include_targets
         self.use_cpu = use_cpu
@@ -25,7 +25,7 @@ class EmbeddingGenerator(keras.utils.Sequence):
         inputs = workflow.load_embeddings(self.name, labels, self.use_cpu)
 
         if self.include_targets:
-            outputs = workflow.load_energy_metadata(labels, self.df)
+            outputs = workflow.load_energy_metadata(labels, self.foldx_dict)
             return inputs, outputs
         else:
             return inputs

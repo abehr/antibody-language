@@ -9,7 +9,7 @@ import subprocess
 import esm_src.esm as esm
 from argparse import Namespace
 import random
-
+import csv
 
 model_name = 'esm1_t34_670M_UR50S'
 model_url = 'https://dl.fbaipublicfiles.com/fair-esm/models/%s.pt' % model_name
@@ -79,7 +79,34 @@ def import_energy_metadata():
 	# Get FoldX calculations from Excel spreadsheet
 	assert os.path.exists(foldx_metadata_fp), 'FoldX data file %s does not exist' % foldx_metadata_fp
 	print('Read FoldX data from Excel file')
-	return pd.read_excel(foldx_metadata_fp, sheet_name=1) # Sheet2
+	
+	df = pd.read_excel(foldx_metadata_fp, sheet_name=1) # Sheet2
+
+	# Output FoldX calculations (only) to CSV file for faster future import
+	csv_fp = os.path.splitext(foldx_metadata_fp)[0] + '_foldx_only.csv'
+	if not os.path.isfile(csv_fp):
+		out_df = df[['Antibody_ID','FoldX_Average_Whole_Model_DDG', 'FoldX_Average_Interface_Only_DDG']]
+		out_df.to_csv(csv_fp)
+
+	return df
+
+
+def import_energy_metadata_foldx():
+	csv_fp = os.path.splitext(foldx_metadata_fp)[0] + '_foldx_only.csv'
+	assert os.path.isfile(csv_fp), 'FoldX CSV file does not exist; you need to run import_energy_metadata() first'
+
+	with open(csv_fp) as f:
+		r = csv.reader(f)
+		r.__next__() # skip header row
+		d = {l[1]: np.array([l[2], l[3]]).astype('float32') for l in r}
+
+	return d
+	
+
+def load_energy_metadata_foldx(seqs, foldx_dict):
+	return np.stack([foldx_dict[seq] for seq in seqs])
+
+
 
 def get_embedding_list(name):
 	assert os.path.exists(fasta_fp(name)), 'Fasta file for %s does not exist' % name
