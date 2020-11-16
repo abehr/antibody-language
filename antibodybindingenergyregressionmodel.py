@@ -52,7 +52,7 @@ dropout = .2
 def RegressionModel(input_shape, dropout=.2):
     X_input = keras.Input(input_shape)
 
-    X = keras.layers.Lambda(lambda batch: workflow.load_embeddings(name, batch))(X_input)
+    X = keras.layers.Lambda(lambda batch: workflow.load_embeddings(name, batch), dynamic=True)(X_input)
     X = keras.layers.Dropout(dropout)(X)
 
 
