@@ -43,7 +43,7 @@ X_train = workflow.get_embedding_list('subset_200_seq85k')
 Y = workflow.load_energy_metadata(X_train, df)
 Y_train = Y[:, 0:1]
 
-input_shape = X_train.shape[1]
+input_shape = 1
 
 dropout = .2
 
