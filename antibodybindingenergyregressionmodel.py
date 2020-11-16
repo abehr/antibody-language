@@ -8,11 +8,11 @@ Original file is located at
 """
 
 import numpy as np
-import torch
-import torch.nn as nn
-import keras
-from keras.models import Sequential
-from keras.layers import Dense
+# import torch
+# import torch.nn as nn
+# import keras
+# from keras.models import Sequential
+# from keras.layers import Dense
 import workflow
 
 
@@ -45,40 +45,43 @@ X_train = workflow.get_embedding_list(name)
 Y = workflow.load_energy_metadata(X_train, df)
 Y_train = Y[:, 0:1]
 
-input_shape = 1
-
-dropout = .2
-
-def RegressionModel(input_shape, dropout=.2):
-    X_input = keras.Input(input_shape)
-
-    X = keras.layers.Lambda(lambda batch: workflow.load_embeddings(name, batch), dynamic=True)(X_input)
-    X = keras.layers.Dropout(dropout)(X)
+workflow.load_embeddings(name, keys)
 
 
-    X = Dense(800, activation='relu', kernel_initializer="he_uniform")(X)
-    X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
-    X = keras.layers.Dropout(dropout)(X)
+# input_shape = 1
+
+# dropout = .2
+
+# def RegressionModel(input_shape, dropout=.2):
+#     X_input = keras.Input(input_shape)
+
+#     X = keras.layers.Lambda(lambda batch: workflow.load_embeddings(name, batch), dynamic=True)(X_input)
+#     X = keras.layers.Dropout(dropout)(X)
 
 
-    X = Dense(700, activation='relu', kernel_initializer="he_uniform")(X)
-    X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
-    X = keras.layers.Dropout(dropout)(X)
+#     X = Dense(800, activation='relu', kernel_initializer="he_uniform")(X)
+#     X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
+#     X = keras.layers.Dropout(dropout)(X)
 
 
-    X = Dense(400, activation='relu', kernel_initializer="he_uniform")(X)
-    X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
-    X = keras.layers.Dropout(dropout)(X)
+#     X = Dense(700, activation='relu', kernel_initializer="he_uniform")(X)
+#     X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
+#     X = keras.layers.Dropout(dropout)(X)
 
 
-    X = Dense(3, kernel_initializer="he_uniform")(X)
+#     X = Dense(400, activation='relu', kernel_initializer="he_uniform")(X)
+#     X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
+#     X = keras.layers.Dropout(dropout)(X)
 
-    model = keras.Model(inputs = X_input, outputs = X, name='RegressionModel')
 
-    return model
+#     X = Dense(3, kernel_initializer="he_uniform")(X)
 
-model = RegressionModel(input_shape)
+#     model = keras.Model(inputs = X_input, outputs = X, name='RegressionModel')
 
-model.compile(optimizer='adam', loss=keras.losses.MeanSquaredError())
+#     return model
 
-model.fit(x=X_train, y=Y_train, batch_size=2, epochs=1)
+# model = RegressionModel(input_shape)
+
+# model.compile(optimizer='adam', loss=keras.losses.MeanSquaredError())
+
+# model.fit(x=X_train, y=Y_train, batch_size=2, epochs=1)
