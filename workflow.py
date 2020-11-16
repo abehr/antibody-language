@@ -26,7 +26,7 @@ fasta_fp = lambda name: os.path.join(data_dir, name + '.fasta')
 
 
 # 1-indexed list of indices to allowed to mutate
-initial_masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103,104,271,273,274,275,335,336,337,338,340,341]
+masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103,104,271,273,274,275,335,336,337,338,340,341]
 
 
 all_fastas = ['seq85k', 'subset_seq89k', 'random_generated', 'substitution_generated', 'model_generated']
@@ -224,6 +224,7 @@ def random_gen(seq, masks):
 
 
 # Simple unmasking method - just predict all masked tokens at once using softmax
+# This is just a proof of concept and simple example; it will not be ultimately used. 
 def model_predict_seq(seq, masks, use_cpu):
 	name = 'cov2_model_predicted'
 	print('Generate %s predictions' % name)
@@ -255,6 +256,103 @@ def model_predict_seq(seq, masks, use_cpu):
 
 	# return in the same format as load_seqs_and_embeddings
 	return {labels[i]: {'token_embeddings': token_embeddings[i]} for i in range(len(labels))}
+
+
+
+def load_model_prediction_tools(seq, use_cpu):
+	print('Load ESM model and convert template sequence')
+	model, alphabet = load_local_model(use_cpu)
+	batch_converter = alphabet.get_batch_converter()
+		
+	# Note this will also pad any sequence with different length
+	labels, strs, tokens = batch_converter([('cov1_ab', seq)])
+
+	return model, alphabet, batch_converter, tokens
+
+
+def unmask_single(tokens, model, alphabet, idx):
+	with torch.no_grad():
+		results = model(tokens, repr_layers=[34])
+	tokens, _, logits = parse_model_results(tokens, results)
+	softmax_predict_unmask(tokens, logits, idx)
+	return tokens
+	# predicted_str = tokens2strs(alphabet, tokens)[0]
+	# return predicted_str
+
+
+def compute_predicted_seq_embeddings(model, batch_converter, predicted_seqs):
+	labels, strs, tokens = batch_converter(predicted_seqs)
+
+	with torch.no_grad():
+		results = model(tokens, repr_layers=[34])
+
+	_, token_embeddings, _ = parse_model_results(tokens, results)
+
+	return {label: {'token_embeddings': embeddings} for label, embeddings in zip(labels, token_embeddings)}
+
+
+# mask/unmask one at a time, randomly, mu times (with replacement s.t. may or may not mutate all 31)
+def model_predict_seqs_2(initial_tokens, model, alphabet, idx, mu):
+	name = 'M2_mu%d_%d' % (mu, idx)
+	print(name)
+	# TODO: should mu be random or not?
+	tokens = initial_tokens.detach().clone()
+	for i in range(mu):
+		mask = masks[random.randint(0, len(masks)-1)] # mask a random token
+		apply_mask(tokens, [mask])
+		tokens = unmask_single(tokens, model, alphabet, mask) # unmask it using softmax dist prediction
+		
+	return (name, tokens)
+
+
+# mask all 31 residues; unmask all one at a time in random order
+def model_predict_seqs_3(initial_tokens, model, alphabet, idx):
+	name = 'M3_%d' % idx
+	print(name)
+	tokens = initial_tokens.detach().clone()
+	apply_mask(tokens, masks) # mask all tokens
+
+	for mask in random.shuffle(list(masks)):
+		tokens = unmask_single(tokens, model, alphabet, mask) # unmask all, one at a time, in random order
+
+	return (name, tokens)
+
+
+
+# mask a randomly-sized random subset of the 31 residues, unmask all one at a time in random order
+def model_predict_seqs_4(initial_tokens, model, alphabet, idx):
+	name = 'M4_rand%d_%d' % (len(random_masks), idx)
+	print(name)
+	tokens = initial_tokens.detach().clone()
+	
+	# mask a randomly-sized random subset
+	random_masks = list(masks)
+	random.shuffle(random_masks)
+	random_masks = random_masks[:random.randint(0, len(masks))]
+	apply_mask(tokens, random_masks)
+
+	for mask in random_masks:
+		tokens = unmask_single(tokens, model, alphabet, mask) # unmask all, one at a time
+
+	return (name, tokens)
+
+
+def model_predict_seqs(initial_seq, masks, use_cpu):
+	model, alphabet, batch_converter, initial_tokens = load_model_prediction_tools(initial_seq, use_cpu)
+
+	# Predict 10 of each kind of sequence
+	predictions = []
+	for i in range(10):
+		predictions.append(model_predict_seqs_2(initial_tokens, model, alphabet, i, 20))
+		predictions.append(model_predict_seqs_3(initial_tokens, model, alphabet, i))
+		predictions.append(model_predict_seqs_4(initial_tokens, model, alphabet, i))
+
+	return compute_predicted_seq_embeddings(model, batch_converter, predictions)
+
+
+
+
+
 
 
 def parse_model_results(batch_tokens, results):
