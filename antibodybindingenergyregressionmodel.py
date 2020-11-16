@@ -15,31 +15,32 @@ from keras.models import Sequential
 from keras.layers import Dense
 
 df = import_energy_metadata()
-subset_seq89k_embeddings = load_seqs_and_embeddings('subset200_seq89k', False, df)
+# subset_200_seq85k_embeddings = load_seqs_and_embeddings('subset_200_seq85k', False, df)
 
-subset = subset_seq89k_embeddings
+# subset = subset_200_seq85k_embeddings
 
-embeddings = []
-scores = []
+# embeddings = []
+# scores = []
 
-for key in subset.keys():
-  embedding = torch.unsqueeze(subset[key]['token_embeddings'], 0)
-  embeddings.append(embedding)
-  score = np.zeros(3)
-  score[0] = subset[key]['FoldX_Average_Whole_Model_DDG']
-  score[1] = subset[key]['FoldX_Average_Interface_Only_DDG']
-  score[2] = subset[key]['Statium']
-  scores.append(score)
-X = torch.cat(embeddings, dim=0)
-X = torch.flatten(X, start_dim=1, end_dim=-1)
-X = X.numpy()
+# for key in subset.keys():
+#   embedding = torch.unsqueeze(subset[key]['token_embeddings'], 0)
+#   embeddings.append(embedding)
+#   score = np.zeros(3)
+#   score[0] = subset[key]['FoldX_Average_Whole_Model_DDG']
+#   score[1] = subset[key]['FoldX_Average_Interface_Only_DDG']
+#   score[2] = subset[key]['Statium']
+#   scores.append(score)
+# X = torch.cat(embeddings, dim=0)
+# X = torch.flatten(X, start_dim=1, end_dim=-1)
+# X = X.numpy()
 
-Y = np.stack(scores)
+# Y = np.stack(scores)
 
-X = keras.utils.normalize(X, axis=-1, order=2)
+# X = keras.utils.normalize(X, axis=-1, order=2)
 
-X_train = X
-Y_train = Y
+X_train = get_embedding_list('subset_200_seq85k')
+Y = load_energy_metadata(X_train, df)
+Y_train = Y[:, 0:1]
 
 input_shape = X_train.shape[1]
 
@@ -47,6 +48,8 @@ dropout = .2
 
 def RegressionModel(input_shape, dropout=.2):
     X_input = keras.Input(input_shape)
+
+    X = keras.layers.Lambda(load__embeddings)(X_input)
     X = keras.layers.Dropout(dropout)(X_input)
 
 
