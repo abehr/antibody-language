@@ -38,7 +38,7 @@ import workflow
 # Y = np.stack(scores)
 
 # X = keras.utils.normalize(X, axis=-1, order=2)
-name = 'subset_seq89k'
+name = 'subset_200_seq85k'
 
 df = workflow.import_energy_metadata()
 X_train = workflow.get_embedding_list(name)
