@@ -1,4 +1,5 @@
 import torch
+import keras
 import sys
 import os
 import numpy as np
@@ -8,7 +9,7 @@ import subprocess
 import esm_src.esm as esm
 from argparse import Namespace
 import random
-
+import csv
 
 model_name = 'esm1_t34_670M_UR50S'
 model_url = 'https://dl.fbaipublicfiles.com/fair-esm/models/%s.pt' % model_name
@@ -25,7 +26,7 @@ fasta_fp = lambda name: os.path.join(data_dir, name + '.fasta')
 
 
 # 1-indexed list of indices to allowed to mutate
-initial_masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103,104,271,273,274,275,335,336,337,338,340,341]
+masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103,104,271,273,274,275,335,336,337,338,340,341]
 
 
 all_fastas = ['seq85k', 'subset_seq89k', 'random_generated', 'substitution_generated', 'model_generated']
@@ -35,9 +36,13 @@ def run(use_cpu=True):
 	print('Load initial SARS-CoV-1 antibody sequence')
 	with open(cov1_ab_fp) as f: cov1_ab = f.readline().strip()
 
-	# 89k seqs, for training downstream model
+	# Load FoldX energy calculations for the 89k sequences
+	df = import_energy_metadata()
+
+	# Subset of the 89k seqs, for (test) training downstream model
 	compute_embeddings('subset_seq89k')
-	subset_seq89k_embeddings = load_seqs_and_embeddings('subset_seq89k', use_cpu, True)
+	subset_seq89k_embeddings = load_seqs_and_embeddings('subset_seq89k', use_cpu, df)
+
 
 	# Randomly generated mutations
 	generate_random_predictions(cov1_ab, initial_masks, 9)
@@ -70,33 +75,118 @@ def compute_embeddings(name):
 		'--repr_layers', '34', '--include', 'mean', 'per_tok'])
 
 
-# Could also return raw seq from fasta plus FoldX info, but this may not be necessary
-def load_seqs_and_embeddings(name, use_cpu, import_energy_metadata=False):
+def import_energy_metadata():
+	# Get FoldX calculations from Excel spreadsheet
+	assert os.path.exists(foldx_metadata_fp), 'FoldX data file %s does not exist' % foldx_metadata_fp
+	print('Read FoldX data from Excel file')
+	
+	df = pd.read_excel(foldx_metadata_fp, sheet_name=1) # Sheet2
+
+	# Output FoldX calculations (only) to CSV file for faster future import
+	csv_fp = os.path.splitext(foldx_metadata_fp)[0] + '_foldx_only.csv'
+	if not os.path.isfile(csv_fp):
+		out_df = df[['Antibody_ID','FoldX_Average_Whole_Model_DDG', 'FoldX_Average_Interface_Only_DDG']]
+		out_df.to_csv(csv_fp)
+
+	return df
+
+
+def import_energy_metadata_foldx():
+	csv_fp = os.path.splitext(foldx_metadata_fp)[0] + '_foldx_only.csv'
+	assert os.path.isfile(csv_fp), 'FoldX CSV file does not exist; you need to run import_energy_metadata() first'
+
+	with open(csv_fp) as f:
+		r = csv.reader(f)
+		r.__next__() # skip header row
+		d = {l[1]: np.array([l[2], l[3]]).astype('float32') for l in r}
+
+	return d
+	
+
+def load_energy_metadata_foldx(seqs, foldx_dict):
+	return np.stack([foldx_dict[seq] for seq in seqs])
+
+
+
+def get_embedding_list(name):
+	assert os.path.exists(fasta_fp(name)), 'Fasta file for %s does not exist' % name
+	assert os.path.exists(embedding_dir(name)), 'Embeddings for %s do not exist' % name
+	return np.array([os.path.splitext(x)[0] for x in os.listdir(embedding_dir(name))])
+
+
+def load_energy_metadata(seqs, energy_metadata):
+	metadata_dict = []
+	for label in seqs:
+		metadata = energy_metadata.loc[energy_metadata.Antibody_ID==label]
+		assert metadata.shape[0] > 0, 'Expected a metadata entry for %s' % label
+		metadata = metadata.iloc[0]
+		metadata_dict.append([
+			metadata.FoldX_Average_Whole_Model_DDG,
+			metadata.FoldX_Average_Interface_Only_DDG
+			# metadata.Statium
+		])
+
+	return np.stack(metadata_dict)
+
+
+def load_embeddings(name, batch, use_cpu=False):
+	assert os.path.exists(embedding_dir(name)), 'Embeddings for %s do not exist' % name
+	embeddings = []
+	for seq in batch:
+		f = os.path.join(embedding_dir(name), seq + '.pt')
+		assert os.path.isfile(f), 'Requested embedding file(s) not found'
+		if use_cpu or not torch.cuda.is_available():
+			data = torch.load(f, map_location=torch.device('cpu'))
+		else:
+			data = torch.load(f)
+
+		label = data['label']
+		token_embeddings = np.delete(data['representations'][34], (0), axis=1)
+
+		embeddings.append(torch.unsqueeze(token_embeddings, 0))
+
+	X = torch.cat(embeddings, dim=0)
+	X = torch.flatten(X, start_dim=1, end_dim=-1)
+	X = X.numpy()
+	X = keras.utils.normalize(X, axis=-1, order=2)
+	return X
+
+
+
+
+
+'''
+energy_metadata expects a pandas dataframe (output of import_energy_metadata()).
+	If provided, it adds FoldX calculations to the output.
+subset is an optional list of sequence IDs. Normally, this function returns all
+	of the embeddings found in the 'name' embedding dir. If provided, only return
+	this subset. 
+'''
+def load_seqs_and_embeddings(name, use_cpu, energy_metadata=None, subset=None):
 	print('Load seqs and embeddings for %s' % name)
 	assert os.path.exists(fasta_fp(name)), 'Fasta file for %s does not exist' % name
 	assert os.path.exists(embedding_dir(name)), 'Embeddings for %s do not exist' % name
+	if energy_metadata is not None:
+		assert type(energy_metadata) == pd.core.frame.DataFrame, 'Unexpected energy metadata type'
 
-	if import_energy_metadata:
-		# Get FoldX calculations from Excel spreadsheet
-		assert os.path.exists(foldx_metadata_fp), 'FoldX data file %s does not exist' % foldx_metadata_fp
-		print('Read FoldX data from Excel file')
-		df = pd.read_excel(foldx_metadata_fp, sheet_name=1) # Sheet2
 
 	print('Load embeddings from files and combine with metadata')
 	embeddings_dict = {}
-	for f in os.listdir(embedding_dir(name)):
+	for seq in (subset if subset else os.listdir(embedding_dir(name))):
+		f = os.path.join(embedding_dir(name), seq + ('.pt' if subset else ''))
+		assert os.path.isfile(f), 'Requested embedding file(s) not found'
 		if use_cpu or not torch.cuda.is_available():
-			data = torch.load(os.path.join(embedding_dir(name), f), map_location=torch.device('cpu'))
+			data = torch.load(f, map_location=torch.device('cpu'))
 		else:
-			data = torch.load(os.path.join(embedding_dir(name), f))
+			data = torch.load(f)
 
 		label = data['label']
 		token_embeddings = np.delete(data['representations'][34], (0), axis=1)
 		# logits = np.delete(data['logits'], (0), axis=1)
 		d = {'token_embeddings': token_embeddings}
 
-		if import_energy_metadata:
-			metadata = df.loc[df.Antibody_ID==label]
+		if energy_metadata is not None:
+			metadata = energy_metadata.loc[energy_metadata.Antibody_ID==label]
 
 			assert metadata.shape[0] > 0, 'Expected a metadata entry for %s' % label
 			# TODO: There are some duplicate entries, which should be investigaged. 
@@ -134,6 +224,7 @@ def random_gen(seq, masks):
 
 
 # Simple unmasking method - just predict all masked tokens at once using softmax
+# This is just a proof of concept and simple example; it will not be ultimately used. 
 def model_predict_seq(seq, masks, use_cpu):
 	name = 'cov2_model_predicted'
 	print('Generate %s predictions' % name)
@@ -165,6 +256,103 @@ def model_predict_seq(seq, masks, use_cpu):
 
 	# return in the same format as load_seqs_and_embeddings
 	return {labels[i]: {'token_embeddings': token_embeddings[i]} for i in range(len(labels))}
+
+
+
+def load_model_prediction_tools(seq, use_cpu):
+	print('Load ESM model and convert template sequence')
+	model, alphabet = load_local_model(use_cpu)
+	batch_converter = alphabet.get_batch_converter()
+		
+	# Note this will also pad any sequence with different length
+	labels, strs, tokens = batch_converter([('cov1_ab', seq)])
+
+	return model, alphabet, batch_converter, tokens
+
+
+def unmask_single(tokens, model, alphabet, idx):
+	with torch.no_grad():
+		results = model(tokens, repr_layers=[34])
+	tokens, _, logits = parse_model_results(tokens, results)
+	softmax_predict_unmask(tokens, logits, idx)
+	return tokens
+	# predicted_str = tokens2strs(alphabet, tokens)[0]
+	# return predicted_str
+
+
+def compute_predicted_seq_embeddings(model, batch_converter, predicted_seqs):
+	labels, strs, tokens = batch_converter(predicted_seqs)
+
+	with torch.no_grad():
+		results = model(tokens, repr_layers=[34])
+
+	_, token_embeddings, _ = parse_model_results(tokens, results)
+
+	return {label: {'token_embeddings': embeddings} for label, embeddings in zip(labels, token_embeddings)}
+
+
+# mask/unmask one at a time, randomly, mu times (with replacement s.t. may or may not mutate all 31)
+def model_predict_seqs_2(initial_tokens, model, alphabet, idx, mu):
+	name = 'M2_mu%d_%d' % (mu, idx)
+	print(name)
+	# TODO: should mu be random or not?
+	tokens = initial_tokens.detach().clone()
+	for i in range(mu):
+		mask = masks[random.randint(0, len(masks)-1)] # mask a random token
+		apply_mask(tokens, [mask])
+		tokens = unmask_single(tokens, model, alphabet, mask) # unmask it using softmax dist prediction
+		
+	return (name, tokens)
+
+
+# mask all 31 residues; unmask all one at a time in random order
+def model_predict_seqs_3(initial_tokens, model, alphabet, idx):
+	name = 'M3_%d' % idx
+	print(name)
+	tokens = initial_tokens.detach().clone()
+	apply_mask(tokens, masks) # mask all tokens
+
+	for mask in random.shuffle(list(masks)):
+		tokens = unmask_single(tokens, model, alphabet, mask) # unmask all, one at a time, in random order
+
+	return (name, tokens)
+
+
+
+# mask a randomly-sized random subset of the 31 residues, unmask all one at a time in random order
+def model_predict_seqs_4(initial_tokens, model, alphabet, idx):
+	name = 'M4_rand%d_%d' % (len(random_masks), idx)
+	print(name)
+	tokens = initial_tokens.detach().clone()
+	
+	# mask a randomly-sized random subset
+	random_masks = list(masks)
+	random.shuffle(random_masks)
+	random_masks = random_masks[:random.randint(0, len(masks))]
+	apply_mask(tokens, random_masks)
+
+	for mask in random_masks:
+		tokens = unmask_single(tokens, model, alphabet, mask) # unmask all, one at a time
+
+	return (name, tokens)
+
+
+def model_predict_seqs(initial_seq, masks, use_cpu):
+	model, alphabet, batch_converter, initial_tokens = load_model_prediction_tools(initial_seq, use_cpu)
+
+	# Predict 10 of each kind of sequence
+	predictions = []
+	for i in range(10):
+		predictions.append(model_predict_seqs_2(initial_tokens, model, alphabet, i, 20))
+		predictions.append(model_predict_seqs_3(initial_tokens, model, alphabet, i))
+		predictions.append(model_predict_seqs_4(initial_tokens, model, alphabet, i))
+
+	return compute_predicted_seq_embeddings(model, batch_converter, predictions)
+
+
+
+
+
 
 
 def parse_model_results(batch_tokens, results):
@@ -205,11 +393,12 @@ def load_local_model(use_cpu):
 	return model, alphabet
 
 
-def softmax_predict_unmask(batch_tokens, logits):
+# Predict a specific token (predict_index) or predict all masked
+def softmax_predict_unmask(batch_tokens, logits, predict_index=-1):
 	sm = torch.nn.Softmax(dim=1)
 
 	for i in range(len(batch_tokens)):
-		masks = batch_tokens[i] == 33
+		masks = predict_index if predict_index > -1 else (batch_tokens[i] == 33)
 		softmax_masks = sm(logits[i][masks])
 
 		if softmax_masks.size()[0] > 0:

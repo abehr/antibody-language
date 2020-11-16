@@ -13,35 +13,69 @@ import torch.nn as nn
 import keras
 from keras.models import Sequential
 from keras.layers import Dense
+import workflow
 
-#Number of residues in sequence
-n = 200 
 
-X_train = np.random.rand(100, 1280*n)
-Y_train = np.random.rand(100, 3)
 
-input_shape = X_train.shape[1]
+def dataLoader(keys, batch_size):
+    L = len(keys)
+    df = workflow.import_energy_metadata()
+    #this line is just to make the generator infinite, keras needs that apparently    
+    while True:
 
-dropout = .2
+        batch_start = 0
+        batch_end = batch_size
+
+        while batch_start < L:
+            limit = min(batch_end, L)
+            X = workflow.load_embeddings(name, (keys[batch_start:limit]))
+            Y = workflow.load_energy_metadata((keys[batch_start:limit]), df)
+
+            yield (X,Y) #a tuple with two numpy arrays with batch_size samples     
+
+            batch_start += batch_size   
+            batch_end += batch_size
+
 
 def RegressionModel(input_shape, dropout=.2):
     X_input = keras.Input(input_shape)
     X = keras.layers.Dropout(dropout)(X_input)
-    X = Dense(300, activation='relu')(X_input)
+
+
+    X = Dense(800, activation='relu', kernel_initializer="he_uniform")(X)
+    X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
     X = keras.layers.Dropout(dropout)(X)
-    X = Dense(200, activation='relu')(X_input)
+
+
+    X = Dense(700, activation='relu', kernel_initializer="he_uniform")(X)
+    X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
     X = keras.layers.Dropout(dropout)(X)
-    X = Dense(100, activation='relu')(X_input)
+
+
+    X = Dense(400, activation='relu', kernel_initializer="he_uniform")(X)
+    X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
     X = keras.layers.Dropout(dropout)(X)
-    X = Dense(3, activation='sigmoid')(X_input)
+
+
+    X = Dense(2, kernel_initializer="he_uniform")(X)
 
     model = keras.Model(inputs = X_input, outputs = X, name='RegressionModel')
 
     return model
 
-model = RegressionModel(input_shape)
+dropout = .2
+input_shape = 585782
+model = RegressionModel(input_shape, dropout)
 
 model.compile(optimizer='adam', loss=keras.losses.MeanSquaredError())
 
-model.fit(x=X_train, y=Y_train, batch_size=20, epochs=10)
+name = 'subset_200_seq85k'
+batch_size = 16
+step_size = 12
 
+keys = workflow.get_embedding_list(name)
+
+# TO-DO: separate out test set
+
+# Steps per epoch is size of keys divided batch_size
+model.fit(x=dataLoader(keys, batch_size), steps_per_epoch=step_size, epochs = 1)
