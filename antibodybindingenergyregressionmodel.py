@@ -13,8 +13,9 @@ import torch.nn as nn
 import keras
 from keras.models import Sequential
 from keras.layers import Dense
+import workflow
 
-df = import_energy_metadata()
+df = workflow.import_energy_metadata()
 # subset_200_seq85k_embeddings = load_seqs_and_embeddings('subset_200_seq85k', False, df)
 
 # subset = subset_200_seq85k_embeddings
@@ -38,8 +39,8 @@ df = import_energy_metadata()
 
 # X = keras.utils.normalize(X, axis=-1, order=2)
 
-X_train = get_embedding_list('subset_200_seq85k')
-Y = load_energy_metadata(X_train, df)
+X_train = workflow.get_embedding_list('subset_200_seq85k')
+Y = workflow.load_energy_metadata(X_train, df)
 Y_train = Y[:, 0:1]
 
 input_shape = X_train.shape[1]
@@ -49,8 +50,8 @@ dropout = .2
 def RegressionModel(input_shape, dropout=.2):
     X_input = keras.Input(input_shape)
 
-    X = keras.layers.Lambda(load__embeddings)(X_input)
-    X = keras.layers.Dropout(dropout)(X_input)
+    X = keras.layers.Lambda(workflow.load_embeddings)(X_input)
+    X = keras.layers.Dropout(dropout)(X)
 
 
     X = Dense(800, activation='relu', kernel_initializer="he_uniform")(X)

@@ -1,4 +1,5 @@
 import torch
+import keras
 import sys
 import os
 import numpy as np
@@ -83,7 +84,49 @@ def import_energy_metadata():
 def get_embedding_list(name):
 	assert os.path.exists(fasta_fp(name)), 'Fasta file for %s does not exist' % name
 	assert os.path.exists(embedding_dir(name)), 'Embeddings for %s do not exist' % name
-	return [os.path.splitext(x)[0] for x in os.listdir(embedding_dir(name))]
+	return np.array([os.path.splitext(x)[0] for x in os.listdir(embedding_dir(name))])
+
+
+def load_energy_metadata(seqs, energy_metadata):
+	metadata_dict = []
+	for label in seqs:
+		metadata = energy_metadata.loc[energy_metadata.Antibody_ID==label]
+		assert metadata.shape[0] > 0, 'Expected a metadata entry for %s' % label
+		metadata = metadata.iloc[0]
+		metadata_dict.append([
+			metadata.FoldX_Average_Whole_Model_DDG,
+			metadata.FoldX_Average_Interface_Only_DDG,
+			metadata.Statium
+		])
+
+	return np.stack(metadata_dict)
+
+
+def load_embeddings(name, batch, use_cpu=False):
+	assert os.path.exists(embedding_dir(name)), 'Embeddings for %s do not exist' % name
+	embeddings = []
+	for seq in batch:
+		f = os.path.join(embedding_dir(name), seq + '.pt')
+		assert os.path.isfile(f), 'Requested embedding file(s) not found'
+		if use_cpu or not torch.cuda.is_available():
+			data = torch.load(f, map_location=torch.device('cpu'))
+		else:
+			data = torch.load(f)
+
+		label = data['label']
+		token_embeddings = np.delete(data['representations'][34], (0), axis=1)
+
+		embeddings.append(torch.unsqueeze(token_embeddings, 0))
+
+	X = torch.cat(embeddings, dim=0)
+	X = torch.flatten(X, start_dim=1, end_dim=-1)
+	X = X.numpy()
+	X = keras.utils.normalize(X, axis=-1, order=2)
+	return X
+
+
+
+
 
 '''
 energy_metadata expects a pandas dataframe (output of import_energy_metadata()).
@@ -225,11 +268,12 @@ def load_local_model(use_cpu):
 	return model, alphabet
 
 
-def softmax_predict_unmask(batch_tokens, logits):
+# Predict a specific token (predict_index) or predict all masked
+def softmax_predict_unmask(batch_tokens, logits, predict_index=-1):
 	sm = torch.nn.Softmax(dim=1)
 
 	for i in range(len(batch_tokens)):
-		masks = batch_tokens[i] == 33
+		masks = predict_index if predict_index > -1 else (batch_tokens[i] == 33)
 		softmax_masks = sm(logits[i][masks])
 
 		if softmax_masks.size()[0] > 0:
