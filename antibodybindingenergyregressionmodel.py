@@ -15,7 +15,7 @@ from keras.models import Sequential
 from keras.layers import Dense
 import workflow
 
-df = workflow.import_energy_metadata()
+
 # subset_200_seq85k_embeddings = load_seqs_and_embeddings('subset_200_seq85k', False, df)
 
 # subset = subset_200_seq85k_embeddings
@@ -38,8 +38,10 @@ df = workflow.import_energy_metadata()
 # Y = np.stack(scores)
 
 # X = keras.utils.normalize(X, axis=-1, order=2)
+name = 'subset_200_seq85k'
 
-X_train = workflow.get_embedding_list('subset_200_seq85k')
+df = workflow.import_energy_metadata()
+X_train = workflow.get_embedding_list(name)
 Y = workflow.load_energy_metadata(X_train, df)
 Y_train = Y[:, 0:1]
 
@@ -50,7 +52,7 @@ dropout = .2
 def RegressionModel(input_shape, dropout=.2):
     X_input = keras.Input(input_shape)
 
-    X = keras.layers.Lambda(workflow.load_embeddings)(X_input)
+    X = keras.layers.Lambda(lambda batch: workflow.load_embeddings(name, batch))(X_input)
     X = keras.layers.Dropout(dropout)(X)
 
 
