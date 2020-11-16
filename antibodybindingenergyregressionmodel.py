@@ -40,7 +40,7 @@ def dataLoader(keys, batch_size):
 
 def RegressionModel(input_shape, dropout=.2):
     X_input = keras.Input(input_shape)
-    X = keras.layers.Dropout(dropout)(X)
+    X = keras.layers.Dropout(dropout)(X_input)
 
 
     X = Dense(800, activation='relu', kernel_initializer="he_uniform")(X)
@@ -76,7 +76,7 @@ step_size = 4
 
 keys = workflow.get_embedding_list(name)
 
-
+# TO-DO: separate out test set
 
 # Steps per epoch is size of keys divided batch_size
 model.fit(x=dataLoader(keys, batch_size), steps_per_epoch=step_size, epochs = 1)
