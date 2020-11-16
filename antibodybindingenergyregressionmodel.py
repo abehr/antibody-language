@@ -14,7 +14,10 @@ import keras
 from keras.models import Sequential
 from keras.layers import Dense
 
-data = workflow.run(False)
+df = import_energy_metadata()
+subset_seq89k_embeddings = load_seqs_and_embeddings('subset200_seq89k', False, df)
+
+subset = subset_seq89k_embeddings
 
 embeddings = []
 scores = []
