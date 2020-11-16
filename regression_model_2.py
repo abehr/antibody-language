@@ -16,52 +16,33 @@ from keras.layers import Dense
 import workflow
 from embedding_generator import EmbeddingGenerator
 
+name = 'seq85k'
+use_cpu = False
 
-# subset_200_seq85k_embeddings = load_seqs_and_embeddings('subset_200_seq85k', False, df)
+# df = workflow.import_energy_metadata()
+foldx_dict = workflow.import_energy_metadata_foldx()
+seqs = workflow.get_embedding_list(name)
+np.random.shuffle(seqs) # ensure random order
 
-# subset = subset_200_seq85k_embeddings
-
-# embeddings = []
-# scores = []
-
-# for key in subset.keys():
-#   embedding = torch.unsqueeze(subset[key]['token_embeddings'], 0)
-#   embeddings.append(embedding)
-#   score = np.zeros(3)
-#   score[0] = subset[key]['FoldX_Average_Whole_Model_DDG']
-#   score[1] = subset[key]['FoldX_Average_Interface_Only_DDG']
-#   score[2] = subset[key]['Statium']
-#   scores.append(score)
-# X = torch.cat(embeddings, dim=0)
-# X = torch.flatten(X, start_dim=1, end_dim=-1)
-# X = X.numpy()
-
-# Y = np.stack(scores)
-
-# X = keras.utils.normalize(X, axis=-1, order=2)
-name = 'subset_seq89k'
-use_cpu = True
-
-df = workflow.import_energy_metadata()
-X_train = workflow.get_embedding_list(name)
-# Y = workflow.load_energy_metadata(X_train, df)
-# Y_train = Y[:, 0:1]
-
-input_shape = 1
+batch_size = 128
+input_shape = 585782
 
 dropout = .2
 
-def RegressionModel(input_shape, dropout=.2):
-    X_input = keras.Input(input_shape)
+def RegressionModel():
+    X_input = keras.Input(shape=input_shape)
 
     # X = keras.layers.Lambda(lambda batch: workflow.load_embeddings(name, batch))(X_input)
     X = keras.layers.Dropout(dropout)(X_input)
 
+    for _ in range(5):
+        X = Dense(1000, activation='relu', kernel_initializer="he_uniform")(X)
+        X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
+        X = keras.layers.Dropout(dropout)(X)
 
     X = Dense(800, activation='relu', kernel_initializer="he_uniform")(X)
     X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
     X = keras.layers.Dropout(dropout)(X)
-
 
     X = Dense(700, activation='relu', kernel_initializer="he_uniform")(X)
     X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
@@ -79,12 +60,30 @@ def RegressionModel(input_shape, dropout=.2):
 
     return model
 
-model = RegressionModel(585782)
+model = RegressionModel()
 
 model.compile(optimizer='adam', loss=keras.losses.MeanSquaredError())
 
-# model.fit(x=X_train, y=Y_train, batch_size=2, epochs=1)
 
-train_data = EmbeddingGenerator(X_train, batch_size=2)
 
-model.fit(train_data, epochs=1)
+'''
+smaller subset for testing
+batch_size = 32 # or 16
+train_data = EmbeddingGenerator(name, seqs[:-80000], df, batch_size) # -2000
+valid_data = EmbeddingGenerator(name, seqs[-200:-100], df, batch_size) # -2000,-1000
+test_data = EmbeddingGenerator(name, seqs[-100:], df, batch_size)
+'''
+
+train_data = EmbeddingGenerator(name, seqs[:-2000], df, batch_size)
+valid_data = EmbeddingGenerator(name, seqs[-2000:-1000], df, batch_size)
+test_data = EmbeddingGenerator(name, seqs[-1000:], df, batch_size)
+
+
+model.fit(train_data, validation_data=valid_data, epochs=1)
+model.evaluate(test_data)
+
+traintest = EmbeddingGenerator(name, seqs[500:600], foldx_dict, batch_size)
+
+
+# for subset_200_seq85k, try batch size = 16 
+# 12/12 [==============================] - 5s 450ms/step - loss: 27.4618
