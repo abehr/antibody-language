@@ -95,8 +95,8 @@ def load_energy_metadata(seqs, energy_metadata):
 		metadata = metadata.iloc[0]
 		metadata_dict.append([
 			metadata.FoldX_Average_Whole_Model_DDG,
-			metadata.FoldX_Average_Interface_Only_DDG,
-			metadata.Statium
+			metadata.FoldX_Average_Interface_Only_DDG
+			# metadata.Statium
 		])
 
 	return np.stack(metadata_dict)
