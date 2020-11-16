@@ -25,7 +25,7 @@ class EmbeddingGenerator(keras.utils.Sequence):
         inputs = workflow.load_embeddings(self.name, labels, self.use_cpu)
 
         if self.include_targets:
-            outputs = workflow.load_energy_metadata(labels, self.foldx_dict)
+            outputs = workflow.load_energy_metadata_foldx(labels, self.foldx_dict)
             return inputs, outputs
         else:
             return inputs

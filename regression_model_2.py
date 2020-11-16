@@ -74,9 +74,9 @@ valid_data = EmbeddingGenerator(name, seqs[-200:-100], df, batch_size) # -2000,-
 test_data = EmbeddingGenerator(name, seqs[-100:], df, batch_size)
 '''
 
-train_data = EmbeddingGenerator(name, seqs[:-2000], df, batch_size)
-valid_data = EmbeddingGenerator(name, seqs[-2000:-1000], df, batch_size)
-test_data = EmbeddingGenerator(name, seqs[-1000:], df, batch_size)
+train_data = EmbeddingGenerator(name, seqs[:-2000], foldx_dict, batch_size)
+valid_data = EmbeddingGenerator(name, seqs[-2000:-1000], foldx_dict, batch_size)
+test_data = EmbeddingGenerator(name, seqs[-1000:], foldx_dict, batch_size)
 
 
 model.fit(train_data, validation_data=valid_data, epochs=1)
