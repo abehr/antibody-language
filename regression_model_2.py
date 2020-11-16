@@ -39,16 +39,16 @@ def RegressionModel():
 
     for _ in range(8):
         X = Dense(800, activation='relu', kernel_initializer="he_uniform")(X)
-        X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
+        X = keras.layers.LayerNormalization(axis=-1)(X)
         X = keras.layers.Dropout(dropout)(X)
 
     X = Dense(700, activation='relu', kernel_initializer="he_uniform")(X)
-    X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
+    X = keras.layers.LayerNormalization(axis=-1)(X)
     X = keras.layers.Dropout(dropout)(X)
 
 
     X = Dense(400, activation='relu', kernel_initializer="he_uniform")(X)
-    X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
+    X = keras.layers.LayerNormalization(axis=-1)(X)
     X = keras.layers.Dropout(dropout)(X)
 
 
@@ -69,8 +69,12 @@ model.compile(optimizer='adam', loss=keras.losses.MeanSquaredError())
 
 batch_size = 256 # 16-1024
 
-# smaller subset for testing
-train_data = EmbeddingGenerator(name, seqs[:80000], foldx_dict, batch_size)
+# For entire dataset
+# train_data = EmbeddingGenerator(name, seqs[:80000], foldx_dict, batch_size)
+
+# For testing smaller subset of data
+train_data = EmbeddingGenerator(name, seqs[:1000], foldx_dict, batch_size)
+
 valid_data = EmbeddingGenerator(name, seqs[80000:81000], foldx_dict, batch_size)
 test_data = EmbeddingGenerator(name, seqs[81000:82000], foldx_dict, batch_size)
 
