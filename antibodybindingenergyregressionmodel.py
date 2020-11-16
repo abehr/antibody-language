@@ -30,7 +30,6 @@ def dataLoader(keys, batch_size):
             limit = min(batch_end, L)
             X = workflow.load_embeddings(name, (keys[batch_start:limit]))
             Y = workflow.load_energy_metadata((keys[batch_start:limit]), df)
-            Y = Y[:, 0:1]
 
             yield (X,Y) #a tuple with two numpy arrays with batch_size samples     
 
@@ -58,7 +57,7 @@ def RegressionModel(input_shape, dropout=.2):
     X = keras.layers.Dropout(dropout)(X)
 
 
-    X = Dense(3, kernel_initializer="he_uniform")(X)
+    X = Dense(2, kernel_initializer="he_uniform")(X)
 
     model = keras.Model(inputs = X_input, outputs = X, name='RegressionModel')
 
