@@ -55,7 +55,7 @@ def run(use_cpu=True):
 
 	# Model-generated mutations
 	# model_generated_embeddings = model_predict_seq(cov1_ab, initial_masks, use_cpu)
-	model_predict_seqs(cov1_ab, 100) # this will also compute the embeddings
+	model_predict_seqs(cov1_ab, 10) # this will also compute the embeddings
 
 	return {
 		'subset_seq89k': subset_seq89k_embeddings,
@@ -300,7 +300,8 @@ def compute_predicted_seq_embeddings(model, batch_converter, predicted_seqs):
 
 
 # mask/unmask one at a time, randomly, mu times (with replacement s.t. may or may not mutate all 31)
-def model_predict_seqs_2(initial_tokens, model, alphabet, idx, mu):
+def model_predict_seqs_2(initial_tokens, model, alphabet, idx):
+	mu = random.randint(1,31)
 	name = 'M2_mu%d_%d' % (mu, idx)
 	print(name)
 	# TODO: should mu be constant
@@ -352,24 +353,25 @@ def model_predict_seqs_4(initial_tokens, model, alphabet, idx):
 	return (name, tokens)
 
 
-def model_predict_seqs(initial_seq, num_iters, use_cpu=False):
+def model_predict_seqs(prediction_method, initial_seq, num_iters, use_cpu=False):
 	model, alphabet, batch_converter, initial_tokens = load_model_prediction_tools(initial_seq, use_cpu)
 
-	# Predict 10 of each kind of sequence
 	predictions = []
+	t0 = time.time()
 	for i in range(num_iters):
-		predictions.append(model_predict_seqs_2(initial_tokens, model, alphabet, i+1, random.randint(1, 31)))
-		predictions.append(model_predict_seqs_3(initial_tokens, model, alphabet, i+1))
-		predictions.append(model_predict_seqs_4(initial_tokens, model, alphabet, i+1))
+		t1 = time.time()
+		predictions.append(prediction_method(initial_tokens, model, alphabet, i+1))
+		t2 = time.time()
+		print('iter %d of %d: %.1f min (%.1f min total)' % (i+1, num_iters, (t2-t1)/60, (t2-t0)/60))
 
 	# return compute_predicted_seq_embeddings(model, batch_converter, predictions)
-	labels = [x[0] for x in predicted_seqs]
-	tokens = np.delete(torch.cat([x[1] for x in predicted_seqs]), (0), axis=1) # remove BOS token
+	labels = [x[0] for x in predictions]
+	tokens = np.delete(torch.cat([x[1] for x in predictions]), (0), axis=1) # remove BOS token
 	strs = tokens2strs(alphabet, tokens)
 
 
 	timestamp = time.strftime('%m%d_%H%M', time.localtime(time.time()))
-	name = 'model_predicted_' + timestamp
+	name = prediction_method.__name__ + '_' + timestamp
 
 	# Write seqs to fasta file
 	with open(fasta_fp(name), 'w') as f:
