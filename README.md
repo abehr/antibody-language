@@ -14,7 +14,10 @@ We have applied the [ESM deep Transformer language model](https://www.biorxiv.or
 - Generate a set of candidate sequences mutated using a substitution matrix, to compare with the language model and compute their embeddings.
 - Generate a set of candidate sequences mutated using the language model. We evaluate several methods of performing this multi-token prediction task, which we discuss in the report.
 - Train a regression model to predict FoldX binding energy from per-token sequence embedding.
-- Finally, compare the embeddings generated (1) randomly, (2) using a substitution matrix, and (3) by the language model using the regression model. 
+- Finally, compare the embeddings generated (1) randomly, (2) using a substitution matrix, and (3) by the language model using the regression model.
+
+
+The full workflow takes around a day (24h) to run on a p2.xlarge AMI, with around 2 TB of disk space.
 
 
 ### Running the workflow
