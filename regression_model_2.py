@@ -101,8 +101,11 @@ def main():
 def evaluate():
     predictions = {}
     prediction_types = [
+        'cov1_antibody',
+        'best100',
         'random_generated',
         'substitution_generated',
+        'model_predict_seqs_1_1117_0951',
         'model_predict_seqs_2_1117_0632',
         'model_predict_seqs_3_1117_0703',
         'model_predict_seqs_4_1117_0721'
@@ -145,7 +148,9 @@ def evaluate():
 
 
 def load_from_file(fp):
-    return keras.models.load_model(fp)
+    loaded_model = keras.models.load_model(fp)
+    loaded_model.trainable = False
+    return loaded_model
 
 
 
