@@ -11,6 +11,7 @@ from argparse import Namespace
 import random
 import csv
 import time
+import generators
 
 model_name = 'esm1_t34_670M_UR50S'
 model_url = 'https://dl.fbaipublicfiles.com/fair-esm/models/%s.pt' % model_name
@@ -32,30 +33,36 @@ all_masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103,104
 
 all_fastas = ['seq85k', 'subset_seq89k', 'random_generated', 'substitution_generated', 'model_generated']
 
-def run(use_cpu=True):
+def run(use_cpu=False):
 
 	print('Load initial SARS-CoV-1 antibody sequence')
 	with open(cov1_ab_fp) as f: cov1_ab = f.readline().strip()
 
 	# Load FoldX energy calculations for the 89k sequences
-	# df = import_energy_metadata()
+	df = import_energy_metadata()
 
 	# Subset of the 89k seqs, for (test) training downstream model
 	# compute_embeddings('subset_seq89k')
 	# subset_seq89k_embeddings = load_seqs_and_embeddings('subset_seq89k', use_cpu, df)
 
+	# Compute embeddings for the 85k sequences used in training the regression model
+	compute_embeddings('seq85k')
 
 	# Randomly generated mutations
 	# generate_random_predictions(cov1_ab, initial_masks, 9)
-	generators.generators.generate_random_predictions(cov1_ab, all_masks, 500)
+	generators.generators.generate_random_predictions(cov1_ab, all_masks, 30)
 	compute_embeddings('random_generated')
 	# random_generated_embeddings = load_seqs_and_embeddings('random_generated', use_cpu)
 
-	# Substitution matrix
+	# Substitution matrix-generated mutations
+	generators.generators.generate_substitution_predictions(cov1_ab, all_masks, 30)
+	compute_embeddings('substitution_generated')
 
-	# Model-generated mutations
+	# Model-generated mutations (computes embeddings as well)
 	# model_generated_embeddings = model_predict_seq(cov1_ab, initial_masks, use_cpu)
-	model_predict_seqs(cov1_ab, 10) # this will also compute the embeddings
+	model_predict_seqs(model_predict_seqs_2, cov1_ab, 10)
+	model_predict_seqs(model_predict_seqs_3, cov1_ab, 10)
+	model_predict_seqs(model_predict_seqs_4, cov1_ab, 10)
 
 	return {
 		'subset_seq89k': subset_seq89k_embeddings,
