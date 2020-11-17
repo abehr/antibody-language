@@ -223,7 +223,6 @@ def generate_random_predictions(seq, masks, num_seqs):
 def random_gen(seq, masks):
 	return ''.join([(random.choice(vocab) if i+1 in masks else tok) for i,tok in enumerate(seq)])
 
-
 # Simple unmasking method - just predict all masked tokens at once using softmax
 # This is just a proof of concept and simple example; it will not be ultimately used. 
 def model_predict_seq(seq, masks, use_cpu):
@@ -441,12 +440,16 @@ def softmax_predict_unmask(batch_tokens, logits, predict_index=-1):
 		else:
 			softmax_masks = sm(logits[i][batch_tokens[i] == 33])
 
+		# torch.amax returns max
 		if softmax_masks.size()[0] > 0:
-			# torch.amax returns max
 			if predict_index > -1:
-				batch_tokens[i][predict_index] = torch.argmax(softmax_masks, 1)[0]
+				# Pick max from softmax (not to be used for actual predictions)
+				# batch_tokens[i][predict_index] = torch.argmax(softmax_masks, 1)[0]
+				batch_tokens[i][predict_index] = torch.multinomial(smm, 1)[0][0] # not sure why this shape
 			else:
-				batch_tokens[i][batch_tokens[i] == 33] = torch.argmax(softmax_masks, 1)
+				# Pick max from softmax (not to be used for actual predictions)
+				# batch_tokens[i][batch_tokens[i] == 33] = torch.argmax(softmax_masks, 1)
+				batch_tokens[i][batch_tokens[i] == 33] = torch.multinomial(smm, 1)[:,0] # not sure why this shape
 
 
 
