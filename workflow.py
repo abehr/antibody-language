@@ -11,7 +11,7 @@ from argparse import Namespace
 import random
 import csv
 import time
-import generators
+from generators import Generators
 
 model_name = 'esm1_t34_670M_UR50S'
 model_url = 'https://dl.fbaipublicfiles.com/fair-esm/models/%s.pt' % model_name
@@ -34,8 +34,7 @@ all_masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103,104
 
 all_fastas = ['seq85k', 'subset_seq89k', 'random_generated', 'substitution_generated', 'best100']
 
-def run(use_cpu=False):
-
+def run():
 	print('Load initial SARS-CoV-1 antibody sequence')
 	cov1_ab = load_cov1_template()
 	compute_embeddings('cov1_antibody')
@@ -49,20 +48,21 @@ def run(use_cpu=False):
 
 	# Subset of the 89k seqs, for (test) training downstream model
 	# compute_embeddings('subset_seq89k')
-	# subset_seq89k_embeddings = load_seqs_and_embeddings('subset_seq89k', use_cpu, df)
+	# subset_seq89k_embeddings = load_seqs_and_embeddings('subset_seq89k', True, df)
 
 	# Compute embeddings for the 85k sequences used in training the regression model
 	compute_embeddings('seq85k')
 
 	# Randomly generated mutations
-	generators.generators.generate_random_predictions(cov1_ab, all_masks, 30)
+	Generators.generate_random_predictions(cov1_ab, all_masks, 30)
 	compute_embeddings('random_generated')
 
 	# Substitution matrix-generated mutations
-	generators.generators.generate_substitution_predictions(cov1_ab, all_masks, 30)
+	Generators.generate_substitution_predictions(cov1_ab, all_masks, 30)
 	compute_embeddings('substitution_generated')
 
 	# Model-generated mutations (computes embeddings as well)
+	model_predict_seqs(model_predict_seqs_1, cov1_ab, 10)
 	model_predict_seqs(model_predict_seqs_2, cov1_ab, 10)
 	model_predict_seqs(model_predict_seqs_3, cov1_ab, 10)
 	model_predict_seqs(model_predict_seqs_4, cov1_ab, 10)
@@ -118,7 +118,8 @@ def load_energy_metadata_foldx(seqs, foldx_dict):
 
 
 def load_and_convert_89k_best100():
-	assert os.path.exists(seq89k_best100_fp), '89k best 100 data file %s doe not exist' % seq89k_best100_fp
+	assert os.path.exists(seq89k_best100_fp), 'Data file %s dose not exist' % seq89k_best100_fp
+	assert not os.path.exists(fasta_fp('best100')), '89k best 100 fasta file already exists'
 	print('Read best 100 seqs (out of seq89k) from Excel file & write to fasta')
 
 	df = pd.read_excel(seq89k_best100_fp)
@@ -127,9 +128,6 @@ def load_and_convert_89k_best100():
 		for i in range(df.shape[0]):
 			f.write('>%s\n' % df.iloc[i,0])
 			f.write('%s\n' % df.iloc[i,1])
-
-
-
 
 
 def get_embedding_list(name):
@@ -174,9 +172,6 @@ def load_embeddings(name, batch, use_cpu=False):
 	X = X.numpy()
 	X = keras.utils.normalize(X, axis=-1, order=2)
 	return X
-
-
-
 
 
 '''
@@ -230,56 +225,7 @@ def load_seqs_and_embeddings(name, use_cpu, energy_metadata=None, subset=None):
 def load_cov1_template():
 	with open(fasta_fp('cov1_antibody')) as f:
 		f.readline() # skip label
-		cov1_ab = f.readline().strip()
-
-
-def generate_random_predictions(seq, masks, num_seqs):
-	name = 'random_generated'
-	print('Generate %s predictions' % name)
-	assert not os.path.exists(fasta_fp(name)), '%s fasta already exists' % name
-	
-	with open(fasta_fp(name), 'w') as f:
-		for n in range(num_seqs):
-			f.write('>%s_%d\n' % (name, n+1))
-			f.write('%s\n' % random_gen(seq, masks))
-
-
-def random_gen(seq, masks):
-	return ''.join([(random.choice(vocab) if i+1 in masks else tok) for i,tok in enumerate(seq)])
-
-# Simple unmasking method - just predict all masked tokens at once using softmax
-# This is just a proof of concept and simple example; it will not be ultimately used. 
-def model_predict_seq(seq, masks, use_cpu):
-	name = 'cov2_model_predicted'
-	print('Generate %s predictions' % name)
-
-	model, alphabet = load_local_model(use_cpu)
-	batch_converter = alphabet.get_batch_converter()
-		
-	# Note this will also pad any sequence with different length
-	labels, strs, tokens = batch_converter([('cov1_ab', seq)])
-	apply_mask(tokens, masks)
-
-	with torch.no_grad():
-		results = model(tokens, repr_layers=[34])
-
-	tokens, _, logits = parse_model_results(tokens, results)
-
-	softmax_predict_unmask(tokens, logits)
-
-	# TODO: directly compare initial and final tokens. How many are unchanged?
-
-	# Compute embedding for the new predicted sequence
-	cov2_predicted_str = tokens2strs(alphabet, tokens)[0]
-	labels, strs, tokens = batch_converter([(name, cov2_predicted_str)])
-
-	with torch.no_grad():
-		results = model(tokens, repr_layers=[34])
-
-	_, token_embeddings, _ = parse_model_results(tokens, results)
-
-	# return in the same format as load_seqs_and_embeddings
-	return {labels[i]: {'token_embeddings': token_embeddings[i]} for i in range(len(labels))}
+		return f.readline().strip()
 
 
 
@@ -412,11 +358,6 @@ def model_predict_seqs(prediction_method, initial_seq, num_iters, use_cpu=False)
 		'--repr_layers', '34', '--include', 'per_tok'])
 
 
-
-
-
-
-
 def parse_model_results(batch_tokens, results, remove_bos_token=False):
 	if remove_bos_token:
 		tokens = np.delete(batch_tokens, (0), axis=1)
@@ -481,5 +422,4 @@ def softmax_predict_unmask(batch_tokens, logits, predict_index=-1):
 
 
 if __name__ == '__main__':
-	pass
-	# run()
+	run()

@@ -11,10 +11,9 @@ class EmbeddingGenerator(keras.utils.Sequence):
         self.include_targets = include_targets
         self.use_cpu = use_cpu
         self.indexes = np.arange(len(self.labels))
-        # self.on_epoch_end()
 
     def __len__(self):
-        # number of batches per epoch (??)
+        # number of batches per epoch
         return len(self.labels) // self.batch_size
 
     def __getitem__(self, idx):

@@ -1,21 +1,13 @@
-from typing import List
-# import random
 import numpy as np
 import os
+import esm_src.esm as esm
 
 data_dir = 'data'
+sub_mat_fp = os.path.join(data_dir, 'blosum80.txt')
 fasta_fp = lambda name: os.path.join(data_dir, name + '.fasta')
-import esm_src.esm as esm
 vocab = esm.constants.proteinseq_toks['toks']
 
-# 1-indexed list of indices to allowed to mutate
-masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103,104,271,273,274,275,335,336,337,338,340,341]
-seq = 'QVQLQQSGAEVKKPGSSVKVSCKASGGTFSSYTISWVRQAPGQGLEWMGGITPILGIANYAQKFQGRVTITTDESTSTAYMELSSLRSEDTAVYYCARDTVMGGMDVWGQGTTVTVSSASTKGPSVFPLAPSSKSTSGGTSALGCLVKDYFPEPVTVSWNSGALTSGVHTFPAVLQSSGLYSLSSVVTVPSSSLGTQTYICNVNHKPSNTKVDKKVEPKSCDKTSPLFVHHHHHHGDYKDDDDKGSYELTQPPSVSVAPGKTARITCGGNNIGSKSVHWYQQKPGQAPVLVVYDDSDRPSGIPERFSGSNSGNTATLTISRVEAGDEADYYCQVWDSSSDYVFGTGTKVTVLGQPKANPTVTLFPPSSEEFQANKATLVCLISDFYPGAVTVAWKADGSPVKAGVETTKPSKQSNNKYAASSYLSLTPEQWKSHRSYSCQVTHEGSTVEKTVAPTECS'
-# num_seqs = 100
-
-sub_mat_fp = os.path.join(data_dir, 'blosum80.txt')
-
-class generators():
+class Generators:
 	def generate_random_predictions(seq, masks, num_seqs):
 		name = 'random_generated'
 		print('Generate %s predictions' % name)

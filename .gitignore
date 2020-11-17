@@ -1,4 +1,6 @@
 __pycache__
+data/best100.fasta
 data/*_generated.fasta
+data/model_predict*.fasta
 data/*_embeddings/
 models
