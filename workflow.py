@@ -38,20 +38,24 @@ def run(use_cpu=True):
 	with open(cov1_ab_fp) as f: cov1_ab = f.readline().strip()
 
 	# Load FoldX energy calculations for the 89k sequences
-	df = import_energy_metadata()
+	# df = import_energy_metadata()
 
 	# Subset of the 89k seqs, for (test) training downstream model
-	compute_embeddings('subset_seq89k')
-	subset_seq89k_embeddings = load_seqs_and_embeddings('subset_seq89k', use_cpu, df)
+	# compute_embeddings('subset_seq89k')
+	# subset_seq89k_embeddings = load_seqs_and_embeddings('subset_seq89k', use_cpu, df)
 
 
 	# Randomly generated mutations
-	generate_random_predictions(cov1_ab, initial_masks, 9)
+	# generate_random_predictions(cov1_ab, initial_masks, 9)
+	generators.generators.generate_random_predictions(cov1_ab, all_masks, 500)
 	compute_embeddings('random_generated')
-	random_generated_embeddings = load_seqs_and_embeddings('random_generated', use_cpu)
+	# random_generated_embeddings = load_seqs_and_embeddings('random_generated', use_cpu)
+
+	# Substitution matrix
 
 	# Model-generated mutations
-	model_generated_embeddings = model_predict_seq(cov1_ab, initial_masks, use_cpu)
+	# model_generated_embeddings = model_predict_seq(cov1_ab, initial_masks, use_cpu)
+	model_predict_seqs(cov1_ab, 100) # this will also compute the embeddings
 
 	return {
 		'subset_seq89k': subset_seq89k_embeddings,
@@ -348,13 +352,13 @@ def model_predict_seqs_4(initial_tokens, model, alphabet, idx):
 	return (name, tokens)
 
 
-def model_predict_seqs(initial_seq, use_cpu):
+def model_predict_seqs(initial_seq, num_iters, use_cpu=False):
 	model, alphabet, batch_converter, initial_tokens = load_model_prediction_tools(initial_seq, use_cpu)
 
 	# Predict 10 of each kind of sequence
 	predictions = []
-	for i in range(10):
-		predictions.append(model_predict_seqs_2(initial_tokens, model, alphabet, i, 20))
+	for i in range(num_iters):
+		predictions.append(model_predict_seqs_2(initial_tokens, model, alphabet, i, random.randint(1, 31)))
 		predictions.append(model_predict_seqs_3(initial_tokens, model, alphabet, i))
 		predictions.append(model_predict_seqs_4(initial_tokens, model, alphabet, i))
 
