@@ -11,6 +11,7 @@ from argparse import Namespace
 import random
 import csv
 import time
+import generators
 
 model_name = 'esm1_t34_670M_UR50S'
 model_url = 'https://dl.fbaipublicfiles.com/fair-esm/models/%s.pt' % model_name
@@ -32,30 +33,36 @@ all_masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103,104
 
 all_fastas = ['seq85k', 'subset_seq89k', 'random_generated', 'substitution_generated', 'model_generated']
 
-def run(use_cpu=True):
+def run(use_cpu=False):
 
 	print('Load initial SARS-CoV-1 antibody sequence')
 	with open(cov1_ab_fp) as f: cov1_ab = f.readline().strip()
 
 	# Load FoldX energy calculations for the 89k sequences
-	# df = import_energy_metadata()
+	df = import_energy_metadata()
 
 	# Subset of the 89k seqs, for (test) training downstream model
 	# compute_embeddings('subset_seq89k')
 	# subset_seq89k_embeddings = load_seqs_and_embeddings('subset_seq89k', use_cpu, df)
 
+	# Compute embeddings for the 85k sequences used in training the regression model
+	compute_embeddings('seq85k')
 
 	# Randomly generated mutations
 	# generate_random_predictions(cov1_ab, initial_masks, 9)
-	generators.generators.generate_random_predictions(cov1_ab, all_masks, 500)
+	generators.generators.generate_random_predictions(cov1_ab, all_masks, 30)
 	compute_embeddings('random_generated')
 	# random_generated_embeddings = load_seqs_and_embeddings('random_generated', use_cpu)
 
-	# Substitution matrix
+	# Substitution matrix-generated mutations
+	generators.generators.generate_substitution_predictions(cov1_ab, all_masks, 30)
+	compute_embeddings('substitution_generated')
 
-	# Model-generated mutations
+	# Model-generated mutations (computes embeddings as well)
 	# model_generated_embeddings = model_predict_seq(cov1_ab, initial_masks, use_cpu)
-	model_predict_seqs(cov1_ab, 10) # this will also compute the embeddings
+	model_predict_seqs(model_predict_seqs_2, cov1_ab, 10)
+	model_predict_seqs(model_predict_seqs_3, cov1_ab, 10)
+	model_predict_seqs(model_predict_seqs_4, cov1_ab, 10)
 
 	return {
 		'subset_seq89k': subset_seq89k_embeddings,
@@ -274,14 +281,12 @@ def load_model_prediction_tools(seq, use_cpu):
 	return model, alphabet, batch_converter, initial_tokens
 
 
-def unmask_single(tokens, model, alphabet, idx):
+def unmask_token(tokens, model, alphabet, idx=-1):
 	with torch.no_grad():
 		results = model(tokens, repr_layers=[34])
 	tokens, _, logits = parse_model_results(tokens, results)
 	softmax_predict_unmask(tokens, logits, idx)
 	return tokens
-	# predicted_str = tokens2strs(alphabet, tokens)[0]
-	# return predicted_str
 
 
 def compute_predicted_seq_embeddings(model, batch_converter, predicted_seqs):
@@ -299,6 +304,17 @@ def compute_predicted_seq_embeddings(model, batch_converter, predicted_seqs):
 	# return {label: {'token_embeddings': embeddings} for label, embeddings in zip(labels, token_embeddings)}
 
 
+# mask all 31 residues at once; unmask all at once.
+# This is not expected to work well; only to be used for comparison
+def model_predict_seqs_1(initial_tokens, model, alphabet, idx):
+	name = 'M1_%d' % idx
+	print(name)
+	tokens = initial_tokens.detach().clone()
+	apply_mask(tokens, all_masks) # mask all tokens
+	tokens = unmask_token(tokens, model, alphabet) # unmask/predict all tokens
+	return (name, tokens)
+
+
 # mask/unmask one at a time, randomly, mu times (with replacement s.t. may or may not mutate all 31)
 def model_predict_seqs_2(initial_tokens, model, alphabet, idx):
 	mu = random.randint(1,31)
@@ -310,7 +326,7 @@ def model_predict_seqs_2(initial_tokens, model, alphabet, idx):
 		mask = all_masks[random.randint(0, len(all_masks)-1)] 
 		print('Masking/unmasking single token at position %d (iter %d of %d)' % (mask, i+1, mu))
 		apply_mask(tokens, [mask]) # mask a random token
-		tokens = unmask_single(tokens, model, alphabet, mask) # unmask it using softmax dist prediction
+		tokens = unmask_token(tokens, model, alphabet, mask) # unmask it using softmax dist prediction
 		
 	return (name, tokens)
 
@@ -326,7 +342,7 @@ def model_predict_seqs_3(initial_tokens, model, alphabet, idx):
 	random.shuffle(unmask_order)
 	for i,mask in enumerate(unmask_order):
 		print('Unmasking all tokens in random order (%d of 31)' % (i+1))
-		tokens = unmask_single(tokens, model, alphabet, mask) # unmask all, one at a time, in random order
+		tokens = unmask_token(tokens, model, alphabet, mask) # unmask all, one at a time, in random order
 
 	return (name, tokens)
 
@@ -348,7 +364,7 @@ def model_predict_seqs_4(initial_tokens, model, alphabet, idx):
 	print('Masking %d (of 31) tokens at once' % len(random_masks))
 	for i,mask in enumerate(random_masks):
 		print('Unmasking %d of %d tokens' % (i+1, len(random_masks)))
-		tokens = unmask_single(tokens, model, alphabet, mask) # unmask all, one at a time
+		tokens = unmask_token(tokens, model, alphabet, mask) # unmask all, one at a time
 
 	return (name, tokens)
 
