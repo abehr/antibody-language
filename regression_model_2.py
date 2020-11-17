@@ -43,14 +43,12 @@ def RegressionModel():
         X = keras.layers.Dropout(dropout)(X)
 
     X = Dense(700, activation='relu', kernel_initializer="he_uniform")(X)
-    X = keras.layers.LayerNormalization(axis=-1)(X)
+    X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
     X = keras.layers.Dropout(dropout)(X)
-
 
     X = Dense(400, activation='relu', kernel_initializer="he_uniform")(X)
-    X = keras.layers.LayerNormalization(axis=-1)(X)
+    X = keras.layers.BatchNormalization(axis=-1, momentum=0.99)(X)
     X = keras.layers.Dropout(dropout)(X)
-
 
     X = Dense(2, kernel_initializer="he_uniform")(X)
 
@@ -65,15 +63,13 @@ print('AbReg - Compile model')
 model.compile(optimizer='adam', loss=keras.losses.MeanSquaredError())
 
 
-
-
 batch_size = 256 # 16-1024
 
 # For entire dataset
-# train_data = EmbeddingGenerator(name, seqs[:80000], foldx_dict, batch_size)
+train_data = EmbeddingGenerator(name, seqs[:80000], foldx_dict, batch_size)
 
 # For testing smaller subset of data
-train_data = EmbeddingGenerator(name, seqs[:1000], foldx_dict, batch_size)
+# train_data = EmbeddingGenerator(name, seqs[:1000], foldx_dict, batch_size)
 
 valid_data = EmbeddingGenerator(name, seqs[80000:81000], foldx_dict, batch_size)
 test_data = EmbeddingGenerator(name, seqs[81000:82000], foldx_dict, batch_size)
@@ -92,6 +88,10 @@ model_fp = os.path.join('models', 'abreg_' + timestamp)
 print('AbReg - Save model to file %s' % model_fp)
 model.save(model_fp)
 
+# to reload
+# model = keras.models.load_model('models/abreg_1116_1545')
+
+model.trainable = False
 
 print('AbReg - Evaluate model')
 model.evaluate(test_data)
@@ -100,3 +100,49 @@ model.evaluate(test_data)
 
 # for subset_200_seq85k, try batch size = 16 
 # 12/12 [==============================] - 5s 450ms/step - loss: 27.4618
+
+
+
+predictions = {}
+prediction_types = [
+    'random_generated',
+    'substitution_generated',
+    'model_predict_seqs_2_1117_0632',
+    'model_predict_seqs_3_1117_0703',
+    'model_predict_seqs_4_1117_0721'
+]
+
+for n in prediction_types:
+    print('AbReg - Predict generated embeddings: ' + n)
+    labels = workflow.get_embedding_list(n)
+    # Note: batch size *must* not be larger than data size
+    predicted_embeddings = EmbeddingGenerator(n, labels, foldx_dict, len(labels), include_targets=False)
+    predicted_energies = model.predict(predicted_embeddings)
+    predictions[n] = predicted_energies
+
+# print('AbReg - Evaluate predicted binding energy of generated embeddings')
+# for n,e in predictions.items():
+#     print('\nPredicted energies for ' + n)
+#     print('Mean: ' + str(np.mean(e, axis=0)))
+#     print('Stdev: ' + str(np.sqrt(np.var(e, axis=0))))
+
+#     el1 = list(e)
+#     el1.sort(key = lambda x: x[0])
+#     el2 = list(e)
+#     el2.sort(key = lambda x: x[1])
+#     print('Best whole-model FoldX: ' + str(el1[0]))
+#     print('Best interface-only FoldX: ' + str(el2[0]))
+#     print('Worst whole-model FoldX: ' + str(el1[-1]))
+#     print('Worst interface-only FoldX: ' + str(el2[-1]))
+
+
+print('AbReg - Evaluate predicted whole-model binding energy of generated embeddings')
+for n,e in predictions.items():
+    print('\nPredicted energies for ' + n)
+    print('Mean: ' + str(np.mean(e, axis=0)[0]))
+    print('Stdev: ' + str(np.sqrt(np.var(e, axis=0))[0]))
+
+    el1 = list(e)
+    el1.sort(key = lambda x: x[0])
+    print('Best whole-model FoldX: ' + str(el1[0][0]))
+    print('Worst whole-model FoldX: ' + str(el1[-1][0]))
