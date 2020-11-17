@@ -95,10 +95,10 @@ def main():
     print('AbReg - Evaluate model')
     model.evaluate(test_data)
 
-    evaluate()
+    evaluate(model)
 
 
-def evaluate():
+def evaluate(model):
     predictions = {}
     prediction_types = [
         'cov1_antibody',
@@ -148,9 +148,9 @@ def evaluate():
 
 
 def load_from_file(fp):
-    loaded_model = keras.models.load_model(fp)
-    loaded_model.trainable = False
-    return loaded_model
+    model = keras.models.load_model(fp)
+    model.trainable = False
+    return model
 
 
 
