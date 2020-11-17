@@ -1,6 +1,12 @@
 from typing import List
-from random import random
+# import random
 import numpy as np
+import os
+
+data_dir = 'data'
+fasta_fp = lambda name: os.path.join(data_dir, name + '.fasta')
+import esm_src.esm as esm
+vocab = esm.constants.proteinseq_toks['toks']
 
 # 1-indexed list of indices to allowed to mutate
 masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103,104,271,273,274,275,335,336,337,338,340,341]
@@ -20,7 +26,7 @@ class generators():
 			mutant=''
 			for i,residue in enumerate(seq):
 				if (i+1) in masks:
-					mutant += random.choice(vocab)
+					mutant += np.random.choice(vocab)
 				else:
 					mutant += residue
 			random_seqs.add(mutant)
@@ -56,7 +62,8 @@ class generators():
 			for i,residue in enumerate(seq):
 				if (i+1) in masks:
 					dist=probmat[amino_acids.index(residue),:]
-					mutant += random.choice(amino_acids, p=dist)
+					print(np.sum(dist))
+					mutant += np.random.choice(amino_acids, p=dist)
 				else:
 					mutant += residue
 			sub_seqs.add(mutant)
