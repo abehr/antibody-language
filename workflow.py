@@ -18,8 +18,9 @@ model_url = 'https://dl.fbaipublicfiles.com/fair-esm/models/%s.pt' % model_name
 model_dir = 'models'
 model_fp = os.path.join(model_dir, model_name + '.pt')
 data_dir = 'data'
-cov1_ab_fp = os.path.join(data_dir, 'cov1-antibody.txt')
+# cov1_ab_fp = os.path.join(data_dir, 'cov1-antibody.txt')
 foldx_metadata_fp = os.path.join(data_dir, '89ksequences.xlsx')
+seq89k_best100_fp = os.path.join(data_dir, 'best100.xlsx')
 
 vocab = esm.constants.proteinseq_toks['toks']
 
@@ -31,12 +32,17 @@ fasta_fp = lambda name: os.path.join(data_dir, name + '.fasta')
 all_masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103,104,271,273,274,275,335,336,337,338,340,341]
 
 
-all_fastas = ['seq85k', 'subset_seq89k', 'random_generated', 'substitution_generated', 'model_generated']
+all_fastas = ['seq85k', 'subset_seq89k', 'random_generated', 'substitution_generated', 'best100']
 
 def run(use_cpu=False):
 
 	print('Load initial SARS-CoV-1 antibody sequence')
-	with open(cov1_ab_fp) as f: cov1_ab = f.readline().strip()
+	cov1_ab = load_cov1_template()
+	compute_embeddings('cov1_antibody')
+
+	# Compute embeddings for the 89k's best 100 to benchmark against model predictions
+	load_and_convert_89k_best100()
+	compute_embeddings('best100')
 
 	# Load FoldX energy calculations for the 89k sequences
 	df = import_energy_metadata()
@@ -49,26 +55,17 @@ def run(use_cpu=False):
 	compute_embeddings('seq85k')
 
 	# Randomly generated mutations
-	# generate_random_predictions(cov1_ab, initial_masks, 9)
 	generators.generators.generate_random_predictions(cov1_ab, all_masks, 30)
 	compute_embeddings('random_generated')
-	# random_generated_embeddings = load_seqs_and_embeddings('random_generated', use_cpu)
 
 	# Substitution matrix-generated mutations
 	generators.generators.generate_substitution_predictions(cov1_ab, all_masks, 30)
 	compute_embeddings('substitution_generated')
 
 	# Model-generated mutations (computes embeddings as well)
-	# model_generated_embeddings = model_predict_seq(cov1_ab, initial_masks, use_cpu)
 	model_predict_seqs(model_predict_seqs_2, cov1_ab, 10)
 	model_predict_seqs(model_predict_seqs_3, cov1_ab, 10)
 	model_predict_seqs(model_predict_seqs_4, cov1_ab, 10)
-
-	return {
-		'subset_seq89k': subset_seq89k_embeddings,
-		'random_generated': random_generated_embeddings,
-		'model_generated': model_generated_embeddings
-	}
 
 
 def compute_embeddings(name):
@@ -117,6 +114,21 @@ def import_energy_metadata_foldx():
 
 def load_energy_metadata_foldx(seqs, foldx_dict):
 	return np.stack([foldx_dict[seq] for seq in seqs])
+
+
+
+def load_and_convert_89k_best100():
+	assert os.path.exists(seq89k_best100_fp), '89k best 100 data file %s doe not exist' % seq89k_best100_fp
+	print('Read best 100 seqs (out of seq89k) from Excel file & write to fasta')
+
+	df = pd.read_excel(seq89k_best100_fp)
+
+	with open(fasta_fp('best100'), 'w') as f:
+		for i in range(df.shape[0]):
+			f.write('>%s\n' % df.iloc[i,0])
+			f.write('%s\n' % df.iloc[i,1])
+
+
 
 
 
@@ -215,8 +227,9 @@ def load_seqs_and_embeddings(name, use_cpu, energy_metadata=None, subset=None):
 	return embeddings_dict
 
 
-def load_template():
-	with open(cov1_ab_fp) as f:
+def load_cov1_template():
+	with open(fasta_fp('cov1_antibody')) as f:
+		f.readline() # skip label
 		cov1_ab = f.readline().strip()
 
 
@@ -404,10 +417,6 @@ def model_predict_seqs(prediction_method, initial_seq, num_iters, use_cpu=False)
 
 
 
-
-
-
-
 def parse_model_results(batch_tokens, results, remove_bos_token=False):
 	if remove_bos_token:
 		tokens = np.delete(batch_tokens, (0), axis=1)
@@ -465,13 +474,9 @@ def softmax_predict_unmask(batch_tokens, logits, predict_index=-1):
 		# torch.amax returns max
 		if softmax_masks.size()[0] > 0:
 			if predict_index > -1:
-				# Pick max from softmax (not to be used for actual predictions)
-				# batch_tokens[i][predict_index] = torch.argmax(softmax_masks, 1)[0]
-				batch_tokens[i][predict_index] = torch.multinomial(softmax_masks, 1)[0][0] # not sure why this shape
+				batch_tokens[i][predict_index] = torch.multinomial(softmax_masks, 1)[0][0]
 			else:
-				# Pick max from softmax (not to be used for actual predictions)
-				# batch_tokens[i][batch_tokens[i] == 33] = torch.argmax(softmax_masks, 1)
-				batch_tokens[i][batch_tokens[i] == 33] = torch.multinomial(softmax_masks, 1)[:,0] # not sure why this shape
+				batch_tokens[i][batch_tokens[i] == 33] = torch.multinomial(softmax_masks, 1)[:,0]
 
 
 
