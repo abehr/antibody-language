@@ -358,9 +358,9 @@ def model_predict_seqs(initial_seq, num_iters, use_cpu=False):
 	# Predict 10 of each kind of sequence
 	predictions = []
 	for i in range(num_iters):
-		predictions.append(model_predict_seqs_2(initial_tokens, model, alphabet, i, random.randint(1, 31)))
-		predictions.append(model_predict_seqs_3(initial_tokens, model, alphabet, i))
-		predictions.append(model_predict_seqs_4(initial_tokens, model, alphabet, i))
+		predictions.append(model_predict_seqs_2(initial_tokens, model, alphabet, i+1, random.randint(1, 31)))
+		predictions.append(model_predict_seqs_3(initial_tokens, model, alphabet, i+1))
+		predictions.append(model_predict_seqs_4(initial_tokens, model, alphabet, i+1))
 
 	# return compute_predicted_seq_embeddings(model, batch_converter, predictions)
 	labels = [x[0] for x in predicted_seqs]
@@ -449,11 +449,11 @@ def softmax_predict_unmask(batch_tokens, logits, predict_index=-1):
 			if predict_index > -1:
 				# Pick max from softmax (not to be used for actual predictions)
 				# batch_tokens[i][predict_index] = torch.argmax(softmax_masks, 1)[0]
-				batch_tokens[i][predict_index] = torch.multinomial(smm, 1)[0][0] # not sure why this shape
+				batch_tokens[i][predict_index] = torch.multinomial(softmax_masks, 1)[0][0] # not sure why this shape
 			else:
 				# Pick max from softmax (not to be used for actual predictions)
 				# batch_tokens[i][batch_tokens[i] == 33] = torch.argmax(softmax_masks, 1)
-				batch_tokens[i][batch_tokens[i] == 33] = torch.multinomial(smm, 1)[:,0] # not sure why this shape
+				batch_tokens[i][batch_tokens[i] == 33] = torch.multinomial(softmax_masks, 1)[:,0] # not sure why this shape
 
 
 
