@@ -10,6 +10,7 @@ import esm_src.esm as esm
 from argparse import Namespace
 import random
 import csv
+import time
 
 model_name = 'esm1_t34_670M_UR50S'
 model_url = 'https://dl.fbaipublicfiles.com/fair-esm/models/%s.pt' % model_name
@@ -26,7 +27,7 @@ fasta_fp = lambda name: os.path.join(data_dir, name + '.fasta')
 
 
 # 1-indexed list of indices to allowed to mutate
-masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103,104,271,273,274,275,335,336,337,338,340,341]
+all_masks = [31,32,33,47,50,51,52,54,55,57,58,59,60,61,62,99,100,101,102,103,104,271,273,274,275,335,336,337,338,340,341]
 
 
 all_fastas = ['seq85k', 'subset_seq89k', 'random_generated', 'substitution_generated', 'model_generated']
@@ -265,9 +266,9 @@ def load_model_prediction_tools(seq, use_cpu):
 	batch_converter = alphabet.get_batch_converter()
 		
 	# Note this will also pad any sequence with different length
-	labels, strs, tokens = batch_converter([('cov1_ab', seq)])
+	labels, strs, initial_tokens = batch_converter([('cov1_ab', seq)])
 
-	return model, alphabet, batch_converter, tokens
+	return model, alphabet, batch_converter, initial_tokens
 
 
 def unmask_single(tokens, model, alphabet, idx):
@@ -281,25 +282,30 @@ def unmask_single(tokens, model, alphabet, idx):
 
 
 def compute_predicted_seq_embeddings(model, batch_converter, predicted_seqs):
-	labels, strs, tokens = batch_converter(predicted_seqs)
+	# labels, strs, tokens = batch_converter(predicted_seqs)
+	# labels = [x[0] for x in predicted_seqs]
+	tokens = torch.cat([x[1] for x in predicted_seqs])
 
 	with torch.no_grad():
 		results = model(tokens, repr_layers=[34])
 
-	_, token_embeddings, _ = parse_model_results(tokens, results)
+	tokens, token_embeddings, _ = parse_model_results(tokens, results, remove_bos_token=True)
 
-	return {label: {'token_embeddings': embeddings} for label, embeddings in zip(labels, token_embeddings)}
+	return token_embeddings
+
+	# return {label: {'token_embeddings': embeddings} for label, embeddings in zip(labels, token_embeddings)}
 
 
 # mask/unmask one at a time, randomly, mu times (with replacement s.t. may or may not mutate all 31)
 def model_predict_seqs_2(initial_tokens, model, alphabet, idx, mu):
 	name = 'M2_mu%d_%d' % (mu, idx)
 	print(name)
-	# TODO: should mu be random or not?
+	# TODO: should mu be constant
 	tokens = initial_tokens.detach().clone()
 	for i in range(mu):
-		mask = masks[random.randint(0, len(masks)-1)] # mask a random token
-		apply_mask(tokens, [mask])
+		mask = all_masks[random.randint(0, len(all_masks)-1)] 
+		print('Masking/unmasking single token at position %d (iter %d of %d)' % (mask, i+1, mu))
+		apply_mask(tokens, [mask]) # mask a random token
 		tokens = unmask_single(tokens, model, alphabet, mask) # unmask it using softmax dist prediction
 		
 	return (name, tokens)
@@ -310,9 +316,12 @@ def model_predict_seqs_3(initial_tokens, model, alphabet, idx):
 	name = 'M3_%d' % idx
 	print(name)
 	tokens = initial_tokens.detach().clone()
-	apply_mask(tokens, masks) # mask all tokens
+	apply_mask(tokens, all_masks) # mask all tokens
 
-	for mask in random.shuffle(list(masks)):
+	unmask_order = list(all_masks)
+	random.shuffle(unmask_order)
+	for i,mask in enumerate(unmask_order):
+		print('Unmasking all tokens in random order (%d of 31)' % (i+1))
 		tokens = unmask_single(tokens, model, alphabet, mask) # unmask all, one at a time, in random order
 
 	return (name, tokens)
@@ -321,23 +330,26 @@ def model_predict_seqs_3(initial_tokens, model, alphabet, idx):
 
 # mask a randomly-sized random subset of the 31 residues, unmask all one at a time in random order
 def model_predict_seqs_4(initial_tokens, model, alphabet, idx):
-	name = 'M4_rand%d_%d' % (len(random_masks), idx)
-	print(name)
 	tokens = initial_tokens.detach().clone()
 	
 	# mask a randomly-sized random subset
-	random_masks = list(masks)
+	random_masks = list(all_masks)
 	random.shuffle(random_masks)
-	random_masks = random_masks[:random.randint(0, len(masks))]
+	random_masks = random_masks[:random.randint(1, len(all_masks))]
 	apply_mask(tokens, random_masks)
+	
 
-	for mask in random_masks:
+	name = 'M4_rand%d_%d' % (len(random_masks), idx)
+	print(name)
+	print('Masking %d (of 31) tokens at once' % len(random_masks))
+	for i,mask in enumerate(random_masks):
+		print('Unmasking %d of %d tokens' % (i+1, len(random_masks)))
 		tokens = unmask_single(tokens, model, alphabet, mask) # unmask all, one at a time
 
 	return (name, tokens)
 
 
-def model_predict_seqs(initial_seq, masks, use_cpu):
+def model_predict_seqs(initial_seq, use_cpu):
 	model, alphabet, batch_converter, initial_tokens = load_model_prediction_tools(initial_seq, use_cpu)
 
 	# Predict 10 of each kind of sequence
@@ -347,7 +359,23 @@ def model_predict_seqs(initial_seq, masks, use_cpu):
 		predictions.append(model_predict_seqs_3(initial_tokens, model, alphabet, i))
 		predictions.append(model_predict_seqs_4(initial_tokens, model, alphabet, i))
 
-	return compute_predicted_seq_embeddings(model, batch_converter, predictions)
+	# return compute_predicted_seq_embeddings(model, batch_converter, predictions)
+	labels = [x[0] for x in predicted_seqs]
+	tokens = np.delete(torch.cat([x[1] for x in predicted_seqs]), (0), axis=1) # remove BOS token
+	strs = tokens2strs(alphabet, tokens)
+
+
+	timestamp = time.strftime('%m%d_%H%M', time.localtime(time.time()))
+	name = 'model_predicted_' + timestamp
+
+	# Write seqs to fasta file
+	with open(fasta_fp(name), 'w') as f:
+		for l,s in zip(labels, strs):
+			f.write('>%s\n' % l)
+			f.write('%s\n' % s)
+
+	subprocess.run(['python3', 'esm_src/extract.py', model_fp, fasta_fp(name), embedding_dir(name), 
+		'--repr_layers', '34', '--include', 'per_tok'])
 
 
 
@@ -355,15 +383,24 @@ def model_predict_seqs(initial_seq, masks, use_cpu):
 
 
 
-def parse_model_results(batch_tokens, results):
-	tokens = np.delete(batch_tokens, (0), axis=1)
-	token_embeddings = np.delete(results["representations"][34], (0), axis=1)
-	logits = np.delete(results["logits"], (0), axis=1)
+
+
+
+
+def parse_model_results(batch_tokens, results, remove_bos_token=False):
+	if remove_bos_token:
+		tokens = np.delete(batch_tokens, (0), axis=1)
+		token_embeddings = np.delete(results["representations"][34], (0), axis=1)
+		logits = np.delete(results["logits"], (0), axis=1)
+	else:
+		tokens = batch_tokens
+		token_embeddings = results["representations"][34]
+		logits = results["logits"]
 
 	return tokens, token_embeddings, logits
 
 
-# tokens is 1-indexed because of BOS token; masks is also 1-indexed.
+# tokens is 1-indexed because of BOS token; masks is also 1-indexed - no need to adjust anything.
 # TODO: vectorize
 def apply_mask(tokens, masks):
 	for i in range(len(tokens)):
@@ -398,13 +435,18 @@ def softmax_predict_unmask(batch_tokens, logits, predict_index=-1):
 	sm = torch.nn.Softmax(dim=1)
 
 	for i in range(len(batch_tokens)):
-		masks = predict_index if predict_index > -1 else (batch_tokens[i] == 33)
-		softmax_masks = sm(logits[i][masks])
+		if predict_index > -1:
+			# convert to 2D tensor so it is the same dims as multiple masks
+			softmax_masks = sm(logits[i][predict_index].view(1, 35))
+		else:
+			softmax_masks = sm(logits[i][batch_tokens[i] == 33])
 
 		if softmax_masks.size()[0] > 0:
 			# torch.amax returns max
-			batch_tokens[i][masks] = torch.argmax(softmax_masks, 1)
-
+			if predict_index > -1:
+				batch_tokens[i][predict_index] = torch.argmax(softmax_masks, 1)[0]
+			else:
+				batch_tokens[i][batch_tokens[i] == 33] = torch.argmax(softmax_masks, 1)
 
 
 
