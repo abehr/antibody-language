@@ -62,7 +62,7 @@ class generators():
 			for i,residue in enumerate(seq):
 				if (i+1) in masks:
 					dist=probmat[amino_acids.index(residue),:]
-					print(np.sum(dist))
+					dist=dist/np.sum(dist)
 					mutant += np.random.choice(amino_acids, p=dist)
 				else:
 					mutant += residue
